@@ -18,13 +18,13 @@
  */
 
 import { readFile } from 'node:fs/promises';
-import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { join } from 'node:path';
 
 import { compileScoring, scoreStatLine } from '../src/lib/scoring';
 import type { League, PositionGroup, Player, StatLine } from '../src/lib/types';
+import { activeLeague, dataDir } from './league-paths';
 
-const DATA = join(dirname(fileURLToPath(import.meta.url)), '..', 'public', 'data');
+const DATA = dataDir(activeLeague());
 
 /** ESPN rounds its published totals; anything under a cent is display noise. */
 const TOLERANCE = 0.005;

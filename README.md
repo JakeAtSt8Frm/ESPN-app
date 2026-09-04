@@ -646,9 +646,9 @@ client would not even fix it, since `fetch` refuses to set `Cookie`; it would
 just leak them.
 
 So `scripts/snapshot.ts` runs in Node with the cookies in the environment and
-writes plain JSON into `public/data`. The shipped bundle contains no cookie, no
-key, and makes no ESPN request. Everything below the fetch boundary is pure, so
-the same normalisers run in the script and in the tests.
+writes plain JSON into `public/data/<league>`. The shipped bundle contains no
+cookie, no key, and makes no ESPN request. Everything below the fetch boundary is
+pure, so the same normalisers run in the script and in the tests.
 
 ```bash
 ESPN_SWID='{XXXXXXXX-...}' ESPN_S2='AEB...' npm run snapshot
@@ -657,6 +657,42 @@ ESPN_SWID='{XXXXXXXX-...}' ESPN_S2='AEB...' npm run snapshot
 Both can also live in a gitignored `.env` at the repo root. **The `espn_s2`
 cookie expires every few months**; when it does, `snapshot` fails with that
 message rather than retrying, because a stale cookie will never succeed.
+
+### More than one league
+
+The leagues the app can show are listed in `src/lib/leagues.ts`, and that file is
+the only place their ids live — the Node scripts read it to know what to pull,
+the browser reads it to build the switcher. Each league gets its own directory
+under `public/data/` and `history/`, and the app reads one of them at a time.
+
+```bash
+npm run snapshot                            # every league
+npm run snapshot -- --league oj-invitational  # just one
+ESPN_LEAGUE=oj-invitational npm run fit:priors
+```
+
+One cookie pair covers all of them. ESPN authorises the *account*, not the
+league, so a second league the same account belongs to needs no second secret; a
+league on someone else's account would.
+
+Only the snapshot loops. The fits and the verifiers are single-league by nature —
+each one reads a scoring table and produces a model for it — so they default to
+the first configured league and take `ESPN_LEAGUE` or `--league` to pick another.
+
+Two things are deliberately **not** shared between leagues, and both are easy to
+get wrong:
+
+- **The finished-season history.** It is pulled from a scoring-neutral endpoint,
+  so it looks shareable, and it is not: `snapshot.ts` compacts every line down to
+  the stat keys the *pulling* league scores (58 for one of these leagues, 50 for
+  the other). A shared copy silently drops keys the other league scores, and
+  nothing fails — the fits just measure the wrong thing.
+- **`MATCHUP_INFLUENCE`.** How much the opponent moves a position is a property
+  of the scoring table, not of football. Measured through the same three seasons,
+  these two leagues come out at QB 0.28 and 0.46. Each league's `fit:priors`
+  writes its own table into `priors.json`; the constant compiled into
+  `lib/matchup.ts` is only the fallback for a snapshot that has never been fit,
+  and it tracks the first configured league.
 
 ### What it fetches
 
@@ -715,10 +751,11 @@ granularity, which is what every section below now rests on.
 2025  6402 pairs    2024  6390 pairs    2023  6174 pairs
 ```
 
-The raw seasons are written to `history/` at the repo root rather than under
-`public/`, because only the Node-side fits read them and eight megabytes has no
-business in a deployed bundle. Everything the browser needs is distilled into
-`public/data/priors.json` by `npm run fit:priors`, at about 3% of the size.
+The raw seasons are written to `history/<league>/` at the repo root rather than
+under `public/`, because only the Node-side fits read them and eight megabytes
+has no business in a deployed bundle. Everything the browser needs is distilled
+into `public/data/<league>/priors.json` by `npm run fit:priors`, at about 3% of
+the size.
 
 ### What the snapshot keeps, and what it drops
 
@@ -1050,6 +1087,10 @@ repository secrets:
 |---|---|
 | `ESPN_SWID` | DevTools → Application → Cookies → espn.com, including the braces |
 | `ESPN_S2` | Same place |
+
+Two secrets, however many leagues. The workflow pulls, fits and verifies each
+league in turn, reading the list from `src/lib/leagues.ts` via `npm run leagues`
+so adding a league is one edit in one file.
 
 The same workflow refreshes the snapshot on a schedule that is deliberately
 uneven — hourly through the American Sunday afternoon and evening, twice on

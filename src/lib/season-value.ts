@@ -204,6 +204,19 @@ export interface BuildSeasonValueInput {
    * which is what the app did before the snapshot carried more than one season.
    */
   durability?: ReadonlyMap<string, number>;
+  /**
+   * How much the opponent actually moves each position, normalised so the peak
+   * is 1 — the league's own measurement, from `priors.json`.
+   *
+   * Optional, falling back to the compiled `MATCHUP_INFLUENCE`. It has to be an
+   * input rather than a constant because it is a property of the *scoring
+   * table*, not of football: a league that awards six points a passing
+   * touchdown makes the opponent matter roughly twice as much to a quarterback
+   * as a four-point league does. Two leagues measured through the same finished
+   * seasons come out at QB 0.28 and 0.46, and a shared constant would price one
+   * of them wrong.
+   */
+  influenceByGroup?: Readonly<Record<PositionGroup, number>>;
 }
 
 /**
@@ -326,6 +339,7 @@ export function buildSeasonValueIndex(input: BuildSeasonValueInput): SeasonValue
     numTeams,
     fromWeek,
     finalWeek,
+    influenceByGroup = MATCHUP_INFLUENCE,
   } = input;
 
   const depth = startingDepthByGroup(rosterSlots, numTeams);
@@ -487,7 +501,7 @@ export function buildSeasonValueIndex(input: BuildSeasonValueInput): SeasonValue
       // Historical holdouts show schedule matters far more for D/ST than RB.
       // Scale that leg by the measured positional influence and return unused
       // weight to the projection instead of pretending every position is equal.
-      const scheduleWeight = SEASON_WEIGHTS.schedule * MATCHUP_INFLUENCE[group];
+      const scheduleWeight = SEASON_WEIGHTS.schedule * influenceByGroup[group];
       const vorpWeight =
         SEASON_WEIGHTS.vorp +
         (SEASON_WEIGHTS.form - formWeight) +

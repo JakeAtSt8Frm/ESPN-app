@@ -9,6 +9,15 @@ import {
 } from 'react';
 import { loadLeague, type LeagueData, type LoadProgress } from './league';
 import { cacheClear } from './cache';
+import {
+  DEFAULT_LEAGUE_KEY,
+  LEAGUES,
+  findLeague,
+  leagueOrDefault,
+  type LeagueConfig,
+} from '../lib/leagues';
+import { MATCHUP_INFLUENCE } from '../lib/matchup';
+import type { PositionGroup } from '../lib/types';
 
 type Status = 'idle' | 'loading' | 'ready' | 'error';
 
@@ -31,6 +40,19 @@ interface LeagueContextValue {
   data: LeagueData | null;
   error: string | null;
   progress: LoadProgress | null;
+  /** Every league the app is configured to show, in switcher order. */
+  leagues: readonly LeagueConfig[];
+  /** The one being viewed. */
+  league: LeagueConfig;
+  /**
+   * Switches leagues, and remembers the choice.
+   *
+   * Each league is a separate snapshot with its own scoring and its own fitted
+   * models, so this discards the loaded `LeagueData` and loads the other one
+   * from scratch rather than trying to swap parts of it. The cached payloads
+   * survive — they are keyed by league — so switching back is immediate.
+   */
+  setLeagueKey: (key: string) => void;
   /** Week the user is currently viewing. */
   week: number;
   setWeek: (week: number) => void;
@@ -60,17 +82,40 @@ interface LeagueContextValue {
 
 const LeagueContext = createContext<LeagueContextValue | null>(null);
 
-const TEAM_KEY = 'espn.teamId';
+const LEAGUE_KEY = 'espn.league';
 
 /**
- * The viewer's own team id, if they have picked one.
+ * Where the viewer's team is remembered, per league.
+ *
+ * Per league because a team id means nothing outside the league that issued it:
+ * team 3 in one is a different person's roster in the other, and a single
+ * shared key would silently open the wrong team on every switch.
+ */
+const teamKeyFor = (leagueKey: string) => `espn.teamId.${leagueKey}`;
+
+/** The league last viewed, falling back to the default. */
+function savedLeagueKey(): string {
+  try {
+    return leagueOrDefault(localStorage.getItem(LEAGUE_KEY)).key;
+  } catch {
+    return DEFAULT_LEAGUE_KEY;
+  }
+}
+
+/**
+ * The viewer's own team id in a league, if they have picked one.
  *
  * The snapshot knows which ESPN account it was generated from but not who is
  * reading, so the app cannot infer this. It remembers the choice instead.
+ *
+ * Falls back to the pre-multi-league key for the default league, so nobody's
+ * saved team is lost by the move to per-league storage.
  */
-function savedTeamId(): number | null {
+function savedTeamId(leagueKey: string): number | null {
   try {
-    const raw = localStorage.getItem(TEAM_KEY);
+    const raw =
+      localStorage.getItem(teamKeyFor(leagueKey)) ??
+      (leagueKey === DEFAULT_LEAGUE_KEY ? localStorage.getItem('espn.teamId') : null);
     const id = raw === null ? Number.NaN : Number(raw);
     return Number.isFinite(id) ? id : null;
   } catch {
@@ -92,7 +137,10 @@ export function LeagueProvider({ children }: { children: ReactNode }) {
   const [error, setError] = useState<string | null>(null);
   const [progress, setProgress] = useState<LoadProgress | null>(null);
   const [week, setWeek] = useState(1);
-  const [selectedTeamId, setTeamIdState] = useState<number | null>(savedTeamId);
+  const [leagueKey, setLeagueKeyState] = useState<string>(savedLeagueKey);
+  const [selectedTeamId, setTeamIdState] = useState<number | null>(() =>
+    savedTeamId(savedLeagueKey()),
+  );
   const [reloadToken, setReloadToken] = useState(0);
   const [refreshState, setRefreshState] = useState<RefreshState>({ phase: 'idle' });
   const [canPull, setCanPull] = useState<boolean | null>(() =>
@@ -107,16 +155,27 @@ export function LeagueProvider({ children }: { children: ReactNode }) {
     setError(null);
     setProgress(null);
 
-    loadLeague((p) => {
-      if (!cancelled) setProgress(p);
-    }, controller.signal)
+    loadLeague(
+      leagueKey,
+      (p) => {
+        if (!cancelled) setProgress(p);
+      },
+      controller.signal,
+    )
       .then((result) => {
         if (cancelled) return;
         setData(result);
         setWeek(result.liveWeek);
-        setTeamIdState((prev) =>
-          prev !== null && result.teamsById.has(prev)
-            ? prev
+        /*
+         * Read from storage rather than kept from the previous render. On a
+         * plain reload the two agree; on a league switch they do not, and
+         * keeping the old value would open the new league on whichever team
+         * happened to share that id.
+         */
+        const saved = savedTeamId(leagueKey);
+        setTeamIdState(
+          saved !== null && result.teamsById.has(saved)
+            ? saved
             : (result.teams[0]?.teamId ?? null),
         );
         setStatus('ready');
@@ -131,71 +190,101 @@ export function LeagueProvider({ children }: { children: ReactNode }) {
       cancelled = true;
       controller.abort();
     };
-  }, [reloadToken]);
+  }, [leagueKey, reloadToken]);
 
-  const setSelectedTeamId = useCallback((id: number) => {
-    setTeamIdState(id);
-    try {
-      localStorage.setItem(TEAM_KEY, String(id));
-    } catch {
-      /* non-fatal */
-    }
-  }, []);
+  const setSelectedTeamId = useCallback(
+    (id: number) => {
+      setTeamIdState(id);
+      try {
+        localStorage.setItem(teamKeyFor(leagueKey), String(id));
+      } catch {
+        /* non-fatal */
+      }
+    },
+    [leagueKey],
+  );
 
-  const refresh = useCallback((options?: { refit?: boolean }) => {
-    const reload = () => {
-      setRefreshState({ phase: 'reloading' });
-      void cacheClear().then(() => {
-        setRefreshState({ phase: 'idle' });
-        setReloadToken((n) => n + 1);
-      });
-    };
+  const setLeagueKey = useCallback(
+    (key: string) => {
+      const next = findLeague(key);
+      // An unknown key means a stale link or an edited storage value. Ignoring
+      // it leaves the app on a league it can actually load.
+      if (!next || next.key === leagueKey) return;
 
-    // GitHub Pages has no server route. Its Actions workflow publishes the
-    // fresh snapshot, and Reload only needs to bypass the local caches.
-    if (!isLocalServer()) {
-      setCanPull(false);
-      reload();
-      return;
-    }
+      // Cleared so the switch shows the loading state rather than the previous
+      // league's numbers under the new league's name.
+      setData(null);
+      setStatus('loading');
+      try {
+        localStorage.setItem(LEAGUE_KEY, next.key);
+      } catch {
+        /* non-fatal */
+      }
+      setLeagueKeyState(next.key);
+    },
+    [leagueKey],
+  );
 
-    setRefreshState({
-      phase: 'pulling',
-      message: options?.refit
-        ? 'Pulling from ESPN and refitting — several minutes'
-        : 'Pulling from ESPN — about a minute',
-    });
+  const refresh = useCallback(
+    (options?: { refit?: boolean }) => {
+      const reload = () => {
+        setRefreshState({ phase: 'reloading' });
+        void cacheClear().then(() => {
+          setRefreshState({ phase: 'idle' });
+          setReloadToken((n) => n + 1);
+        });
+      };
 
-    const url = new URL('api/refresh', document.baseURI);
-    if (options?.refit) url.searchParams.set('fit', '1');
-
-    void fetch(url, { method: 'POST' })
-      .then(async (res) => {
-        /*
-         * A 404 is the expected answer everywhere the app is merely hosted —
-         * GitHub Pages has no such route — and it is not an error worth showing
-         * anybody. It just means this copy cannot pull, which the button says
-         * from then on.
-         */
-        if (res.status === 404 || res.status === 405) {
-          setCanPull(false);
-          reload();
-          return;
-        }
-        setCanPull(true);
-        const body = (await res.json()) as { ok?: boolean; error?: string };
-        if (!body.ok) {
-          setRefreshState({ phase: 'error', message: body.error ?? 'The snapshot failed' });
-          return;
-        }
-        reload();
-      })
-      .catch(() => {
-        // No local server listening at all: the fetch never resolved.
+      // GitHub Pages has no server route. Its Actions workflow publishes the
+      // fresh snapshot, and Reload only needs to bypass the local caches.
+      if (!isLocalServer()) {
         setCanPull(false);
         reload();
+        return;
+      }
+
+      setRefreshState({
+        phase: 'pulling',
+        message: options?.refit
+          ? 'Pulling from ESPN and refitting — several minutes'
+          : 'Pulling from ESPN — about a minute',
       });
-  }, []);
+
+      // Names the league to pull. The endpoint validates it against the same
+      // config before it reaches a process — see `handleRefresh`.
+      const url = new URL('api/refresh', document.baseURI);
+      url.searchParams.set('league', leagueKey);
+      if (options?.refit) url.searchParams.set('fit', '1');
+
+      void fetch(url, { method: 'POST' })
+        .then(async (res) => {
+          /*
+           * A 404 is the expected answer everywhere the app is merely hosted —
+           * GitHub Pages has no such route — and it is not an error worth showing
+           * anybody. It just means this copy cannot pull, which the button says
+           * from then on.
+           */
+          if (res.status === 404 || res.status === 405) {
+            setCanPull(false);
+            reload();
+            return;
+          }
+          setCanPull(true);
+          const body = (await res.json()) as { ok?: boolean; error?: string };
+          if (!body.ok) {
+            setRefreshState({ phase: 'error', message: body.error ?? 'The snapshot failed' });
+            return;
+          }
+          reload();
+        })
+        .catch(() => {
+          // No local server listening at all: the fetch never resolved.
+          setCanPull(false);
+          reload();
+        });
+    },
+    [leagueKey],
+  );
 
   const value = useMemo<LeagueContextValue>(
     () => ({
@@ -203,6 +292,9 @@ export function LeagueProvider({ children }: { children: ReactNode }) {
       data,
       error,
       progress,
+      leagues: LEAGUES,
+      league: leagueOrDefault(leagueKey),
+      setLeagueKey,
       week,
       setWeek,
       selectedTeamId,
@@ -216,6 +308,8 @@ export function LeagueProvider({ children }: { children: ReactNode }) {
       data,
       error,
       progress,
+      leagueKey,
+      setLeagueKey,
       week,
       selectedTeamId,
       setSelectedTeamId,
@@ -232,6 +326,17 @@ export function useLeague(): LeagueContextValue {
   const ctx = useContext(LeagueContext);
   if (!ctx) throw new Error('useLeague must be used inside a LeagueProvider');
   return ctx;
+}
+
+/**
+ * This league's opponent-influence table, with the compiled fallback.
+ *
+ * Separate from `useLeagueData` because the two callers are chips rendered deep
+ * in lists, which must not throw while a league is switching and `data` is
+ * briefly null. The fallback is the same one a never-fitted snapshot gets.
+ */
+export function useMatchupInfluence(): Record<PositionGroup, number> {
+  return useContext(LeagueContext)?.data?.matchupInfluence ?? MATCHUP_INFLUENCE;
 }
 
 /**

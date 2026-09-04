@@ -27,8 +27,9 @@
 import { readFileSync } from 'node:fs';
 import { compileScoring, createScorer } from '../src/lib/scoring';
 import type { League, Player, StatLine } from '../src/lib/types';
+import { activeLeague, dataUrl } from './league-paths';
 
-const ROOT = new URL('../public/data/', import.meta.url);
+const ROOT = dataUrl(activeLeague());
 const read = <T>(name: string): T =>
   JSON.parse(readFileSync(new URL(name, ROOT), 'utf8')) as T;
 

@@ -2,11 +2,19 @@
  * Loads the static snapshot written by `scripts/snapshot.ts`.
  *
  * There is no ESPN API call here and no credential. GitHub Actions pulls ESPN
- * into public/data, and the deployed app reads those JSON files directly.
+ * into `public/data/<league>`, and the deployed app reads those JSON files
+ * directly.
  *
- * Caching is content-addressed by the index's `generatedAt` stamp. The index is
- * always fetched fresh, so a new deployment invalidates exactly what changed
- * without any TTL guessing.
+ * Every loader takes the league key first. Each league is a self-contained
+ * snapshot — its own scoring table, its own fitted models — so there is no
+ * shared payload to hoist out, and threading the key explicitly is what keeps
+ * a switch mid-load from mixing two leagues' files into one `LeagueData`.
+ *
+ * Caching is content-addressed by the index's `generatedAt` stamp *and* keyed
+ * by league. Both halves matter: the stamp means a new deployment invalidates
+ * exactly what changed without any TTL guessing, and the league key means two
+ * leagues cannot collide in the one IndexedDB store they share — without it,
+ * `league.json` would be whichever league was loaded last.
  */
 
 import { cached, TTL } from './cache';
@@ -16,20 +24,30 @@ import type { ProjectionModel } from '../lib/projection';
 import type { League, Matchup, Member, Player, Team } from '../lib/types';
 
 /** Resolves against the deployed base path, so a project page works. */
-function dataUrl(path: string): string {
-  return new URL(`data/${path}`, document.baseURI).toString();
+function dataUrl(leagueKey: string, path: string): string {
+  return new URL(`data/${leagueKey}/${path}`, document.baseURI).toString();
 }
 
-async function fetchJson<T>(path: string, signal?: AbortSignal): Promise<T> {
+async function fetchJson<T>(
+  leagueKey: string,
+  path: string,
+  signal?: AbortSignal,
+): Promise<T> {
   // IndexedDB handles the large payload cache. Bypassing the HTTP cache here
   // ensures Reload sees the newest GitHub Pages deployment immediately.
-  const res = await fetch(dataUrl(path), { signal, cache: 'no-store' });
-  if (!res.ok) throw new Error(`Snapshot ${path} unavailable (${res.status})`);
+  const res = await fetch(dataUrl(leagueKey, path), { signal, cache: 'no-store' });
+  if (!res.ok) {
+    throw new Error(`Snapshot ${leagueKey}/${path} unavailable (${res.status})`);
+  }
   return (await res.json()) as T;
 }
 
 export interface SnapshotIndex {
   generatedAt: number;
+  /** The league this directory holds. Absent on a snapshot taken before
+   * the app supported more than one. */
+  leagueKey?: string;
+  leagueId?: string;
   season: string;
   priorSeason: string;
   leagueName: string;
@@ -185,26 +203,38 @@ export interface HistoryFile {
 }
 
 /** The index is never cached — it is what decides whether the rest is stale. */
-export function loadIndex(signal?: AbortSignal): Promise<SnapshotIndex> {
-  return fetchJson<SnapshotIndex>('index.json', signal);
+export function loadIndex(
+  leagueKey: string,
+  signal?: AbortSignal,
+): Promise<SnapshotIndex> {
+  return fetchJson<SnapshotIndex>(leagueKey, 'index.json', signal);
 }
 
-const stamped = <T>(name: string, stamp: number, signal?: AbortSignal) =>
-  cached(`snapshot:${name}:${stamp}`, TTL.SNAPSHOT, () =>
-    fetchJson<T>(name, signal),
+const stamped = <T>(
+  leagueKey: string,
+  name: string,
+  stamp: number,
+  signal?: AbortSignal,
+) =>
+  cached(`snapshot:${leagueKey}:${name}:${stamp}`, TTL.SNAPSHOT, () =>
+    fetchJson<T>(leagueKey, name, signal),
   );
 
-export const loadLeagueFile = (stamp: number, signal?: AbortSignal) =>
-  stamped<LeagueFile>('league.json', stamp, signal);
+export const loadLeagueFile = (key: string, stamp: number, signal?: AbortSignal) =>
+  stamped<LeagueFile>(key, 'league.json', stamp, signal);
 
-export const loadPlayersFile = (stamp: number, signal?: AbortSignal) =>
-  stamped<PlayersFile>('players.json', stamp, signal);
+export const loadPlayersFile = (key: string, stamp: number, signal?: AbortSignal) =>
+  stamped<PlayersFile>(key, 'players.json', stamp, signal);
 
-export const loadHistoryFile = (stamp: number, signal?: AbortSignal) =>
-  stamped<HistoryFile>('history.json', stamp, signal);
+export const loadHistoryFile = (key: string, stamp: number, signal?: AbortSignal) =>
+  stamped<HistoryFile>(key, 'history.json', stamp, signal);
 
-export const loadWeekFile = (week: number, stamp: number, signal?: AbortSignal) =>
-  stamped<WeekFile>(`weeks/${week}.json`, stamp, signal);
+export const loadWeekFile = (
+  key: string,
+  week: number,
+  stamp: number,
+  signal?: AbortSignal,
+) => stamped<WeekFile>(key, `weeks/${week}.json`, stamp, signal);
 
 /**
  * The fitted weekly projection model.
@@ -222,8 +252,11 @@ export const loadWeekFile = (week: number, stamp: number, signal?: AbortSignal) 
  * old and cost an hour of chasing a bug that was not in the code. It is 23KB
  * gzipped against a 380KB load, which is not worth a staleness class.
  */
-export const loadProjectionModel = (_stamp: number, signal?: AbortSignal) =>
-  fetchJson<ProjectionModel>('projection.json', signal).catch(() => null);
+export const loadProjectionModel = (
+  key: string,
+  _stamp: number,
+  signal?: AbortSignal,
+) => fetchJson<ProjectionModel>(key, 'projection.json', signal).catch(() => null);
 
 /**
  * The offline multi-season priors.
@@ -234,5 +267,5 @@ export const loadProjectionModel = (_stamp: number, signal?: AbortSignal) =>
  * loaded that snapshot. Resolves to null when absent, which the app treats as
  * "fall back to the single prior season".
  */
-export const loadPriorsFile = (_stamp: number, signal?: AbortSignal) =>
-  fetchJson<PriorsFile>('priors.json', signal).catch(() => null);
+export const loadPriorsFile = (key: string, _stamp: number, signal?: AbortSignal) =>
+  fetchJson<PriorsFile>(key, 'priors.json', signal).catch(() => null);

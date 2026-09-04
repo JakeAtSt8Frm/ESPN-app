@@ -9,6 +9,7 @@
     "lint": "oxlint",
     "preview": "vite preview",
     "snapshot": "tsx scripts/snapshot.ts",
+    "leagues": "tsx scripts/list-leagues.ts",
     "fit:projection": "tsx scripts/fit-projection.ts",
     "verify": "tsx scripts/verify-scoring.ts && tsx scripts/verify-analytics.ts && tsx scripts/verify-history.ts",
     "verify:analytics": "tsx scripts/verify-analytics.ts",

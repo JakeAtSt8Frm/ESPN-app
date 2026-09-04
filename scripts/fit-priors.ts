@@ -61,13 +61,16 @@ import { compileScoring } from '../src/lib/scoring';
 import { mean, round } from '../src/lib/stats';
 import { DEFAULT_BOOM_BUST } from '../src/lib/value';
 import { POSITION_GROUPS, type League, type Player, type PositionGroup } from '../src/lib/types';
+import { DEFAULT_LEAGUE_KEY } from '../src/lib/leagues';
+import { activeLeague, dataUrl, historyUrl } from './league-paths';
 
-const DATA = new URL('../public/data/', import.meta.url);
+const LEAGUE = activeLeague();
+const DATA = dataUrl(LEAGUE);
 const read = <T>(name: string): T =>
   JSON.parse(readFileSync(new URL(name, DATA), 'utf8')) as T;
 
 /** Raw finished seasons, which live outside `public/` — see `snapshot.ts`. */
-const HISTORY = new URL('../history/', import.meta.url);
+const HISTORY = historyUrl(LEAGUE);
 const readHistory = <T>(name: string): T =>
   JSON.parse(readFileSync(new URL(name, HISTORY), 'utf8')) as T;
 const out = (msg: string) => process.stdout.write(`${msg}\n`);
@@ -537,15 +540,37 @@ const INFLUENCE_TOLERANCE = 0.1;
 const drifted = POSITION_GROUPS.filter(
   (g) => Math.abs(influence[g] - MATCHUP_INFLUENCE[g]) > INFLUENCE_TOLERANCE,
 );
+
+/*
+ * Only the default league is held to the constant.
+ *
+ * The measurement is a property of the league's scoring table — six points a
+ * passing touchdown makes the opponent matter about twice as much to a
+ * quarterback as four does — so a second league differing from the constant is
+ * the expected result, not a regression. What each league actually uses is its
+ * own `influence` block a few lines below, which is written either way; the
+ * constant is only the fallback for a snapshot that has never been fit, and
+ * that fallback can only be right about one league.
+ */
+const guardsTheConstant = LEAGUE.key === DEFAULT_LEAGUE_KEY;
+
 if (drifted.length > 0) {
   out('');
   for (const g of drifted) {
     out(
-      `  DRIFT  ${g}: shipped ${MATCHUP_INFLUENCE[g].toFixed(2)}, ` +
-        `measured ${influence[g].toFixed(2)} — update MATCHUP_INFLUENCE in lib/matchup.ts`,
+      `  ${guardsTheConstant ? 'DRIFT' : 'differs'}  ${g}: ` +
+        `shipped ${MATCHUP_INFLUENCE[g].toFixed(2)}, measured ${influence[g].toFixed(2)}` +
+        (guardsTheConstant ? ' — update MATCHUP_INFLUENCE in lib/matchup.ts' : ''),
     );
   }
-  driftFailures.push(...drifted.map((g) => `MATCHUP_INFLUENCE.${g}`));
+  if (guardsTheConstant) {
+    driftFailures.push(...drifted.map((g) => `MATCHUP_INFLUENCE.${g}`));
+  } else {
+    out(
+      `  ${LEAGUE.key} scores differently from the fallback constant, which ` +
+        `tracks ${DEFAULT_LEAGUE_KEY}. This league ships its own measurement.`,
+    );
+  }
 } else {
   out('  shipped constants agree with the measurement');
 }

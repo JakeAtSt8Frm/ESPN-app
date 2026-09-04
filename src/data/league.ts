@@ -42,6 +42,7 @@ import {
   buildMatchupIndex,
   matchupIndexFrom,
   buildPregameMatchupIndexes,
+  MATCHUP_INFLUENCE,
   type MatchupIndex,
 } from '../lib/matchup';
 import { fitResidualModel, type PriorPair, type ResidualModel } from '../lib/forecast';
@@ -86,6 +87,12 @@ export interface LeagueData {
   season: string;
   generatedAt: number;
   league: League;
+  /**
+   * How much the opponent moves each position in *this* league, normalised so
+   * the peak is 1. Measured per league by `fit:priors`; falls back to the
+   * compiled `MATCHUP_INFLUENCE` when a snapshot has not been fit.
+   */
+  matchupInfluence: Record<PositionGroup, number>;
   scoringModel: ScoringModel;
   score: (stats: StatLine | undefined | null, group?: PositionGroup | null) => number;
   playersById: Map<string, Player>;
@@ -247,6 +254,7 @@ function opponentsFor(
 }
 
 export async function loadLeague(
+  leagueKey: string,
   onProgress?: (progress: LoadProgress) => void,
   signal?: AbortSignal,
 ): Promise<LeagueData> {
@@ -254,22 +262,22 @@ export async function loadLeague(
     onProgress?.({ phase, loaded, total });
 
   report('Reading snapshot', 0, 4);
-  const index = await loadIndex(signal);
+  const index = await loadIndex(leagueKey, signal);
   const stamp = index.generatedAt;
 
   const [leagueFile, playersFile, historyFile, projectionModel, priors] = await Promise.all([
-    loadLeagueFile(stamp, signal),
-    loadPlayersFile(stamp, signal),
-    loadHistoryFile(stamp, signal),
-    loadProjectionModel(stamp, signal),
-    loadPriorsFile(stamp, signal),
+    loadLeagueFile(leagueKey, stamp, signal),
+    loadPlayersFile(leagueKey, stamp, signal),
+    loadHistoryFile(leagueKey, stamp, signal),
+    loadProjectionModel(leagueKey, stamp, signal),
+    loadPriorsFile(leagueKey, stamp, signal),
   ]);
 
   const { league, teams: rawTeams, schedule, draft, transactions, proSchedule } = leagueFile;
 
   report('Loading weeks', 1, 4);
   const weekFiles = await Promise.all(
-    index.weeks.map((week) => loadWeekFile(week, stamp, signal)),
+    index.weeks.map((week) => loadWeekFile(leagueKey, week, stamp, signal)),
   );
 
   // --- Shapes -------------------------------------------------------------
@@ -934,6 +942,24 @@ export async function loadLeague(
     if (weeks > 0) durability.set(pid, games / weeks);
   }
 
+  /*
+   * The league's own measured opponent influence, or the compiled fallback.
+   *
+   * `MATCHUP_INFLUENCE` was fit against one league's scoring table, and the
+   * measurement is a property of that table rather than of football — see
+   * `BuildSeasonValueInput.influenceByGroup`. Every league's `priors.json`
+   * carries its own, so a snapshot that has been fit prices its own schedule;
+   * one that has not falls back to the constant, which is the same bargain the
+   * rest of the priors make.
+   */
+  const matchupInfluence: Record<PositionGroup, number> = { ...MATCHUP_INFLUENCE };
+  for (const group of Object.keys(matchupInfluence) as PositionGroup[]) {
+    const measured = priors?.influence?.[group];
+    if (typeof measured === 'number' && Number.isFinite(measured)) {
+      matchupInfluence[group] = measured;
+    }
+  }
+
   const seasonValueIndex = buildSeasonValueIndex({
     valueIndex,
     playersById,
@@ -945,6 +971,7 @@ export async function loadLeague(
     fromWeek: liveWeek,
     finalWeek: format.finalWeek,
     durability,
+    influenceByGroup: matchupInfluence,
   });
 
   /*
@@ -1004,6 +1031,7 @@ export async function loadLeague(
     season: index.season,
     generatedAt: stamp,
     league,
+    matchupInfluence,
     scoringModel,
     score,
     playersById,

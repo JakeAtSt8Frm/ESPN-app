@@ -21,12 +21,12 @@
  */
 
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';
-import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { join } from 'node:path';
 
 import { fitInputsHash } from './fit-inputs';
+import { activeLeague, dataDir } from './league-paths';
 
-const DATA = join(dirname(fileURLToPath(import.meta.url)), '..', 'public', 'data');
+const DATA = dataDir(activeLeague());
 const FITS = ['priors.json', 'projection.json'];
 
 const out = (msg: string) => process.stdout.write(`${msg}\n`);

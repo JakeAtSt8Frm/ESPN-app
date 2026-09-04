@@ -3,8 +3,8 @@
  *
  * This script is the *only* thing that ever talks to ESPN, and the only thing
  * that ever sees the credentials. It runs in Node — locally before a build, or
- * on a schedule in CI — and writes plain JSON into `public/data`. The shipped
- * bundle has no cookie in it and makes no ESPN request.
+ * on a schedule in CI — and writes plain JSON into `public/data/<league>`. The
+ * shipped bundle has no cookie in it and makes no ESPN request.
  *
  * That split isn't a stylistic choice. ESPN serves this league only to a
  * request carrying the `SWID` and `espn_s2` cookies, and a browser on
@@ -15,11 +15,14 @@
  *   ESPN_SWID='{XXXXXXXX-...}' ESPN_S2='AEB...' npm run snapshot
  *
  * Both can also live in a gitignored `.env` at the repo root.
+ *
+ * Every league in `src/lib/leagues.ts` is pulled in turn, each into its own
+ * directory, and one cookie pair covers all of them — they are leagues the same
+ * ESPN account belongs to. Pass `--league <key>` to pull just one.
  */
 
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
-import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { join } from 'node:path';
 
 import {
   ESPN_HOST,
@@ -36,11 +39,10 @@ import {
   type RawStatBlock,
 } from '../src/lib/espn';
 import { normalizeStatLine } from '../src/lib/espn-stats';
+import type { LeagueConfig } from '../src/lib/leagues';
 import { LINEUP_SLOTS, PRO_TEAMS, type StatLine } from '../src/lib/types';
+import { dataDir, historyDir, requestedLeagues, ROOT } from './league-paths';
 
-const HERE = dirname(fileURLToPath(import.meta.url));
-const ROOT = join(HERE, '..');
-const OUT = join(ROOT, 'public', 'data');
 
 /**
  * Where the raw multi-season weekly history lands.
@@ -50,12 +52,10 @@ const OUT = join(ROOT, 'public', 'data');
  * is copied verbatim into the deployed bundle — so leaving them there would
  * ship eight megabytes to every visitor to serve a file no client ever
  * requests. Everything the browser needs from them is distilled into
- * `public/data/priors.json` by `npm run fit:priors`, at about three percent of
- * the size.
+ * `public/data/<league>/priors.json` by `npm run fit:priors`, at about three
+ * percent of the size.
  */
-const HISTORY_OUT = join(ROOT, 'history');
 
-const LEAGUE_ID = process.env.ESPN_LEAGUE_ID || '390483100';
 const SEASON = Number(process.env.ESPN_SEASON || new Date().getFullYear());
 /** Season whose completed game logs seed the priors. */
 const HISTORY_SEASON = SEASON - 1;
@@ -188,13 +188,19 @@ interface PlayerEnvelope {
   player: { id: number; stats?: RawStatBlock[] } & Record<string, unknown>;
 }
 
-async function main(): Promise<void> {
-  await loadDotEnv();
-  const creds = credentials();
+
+async function pullLeague(
+  config: LeagueConfig,
+  creds: EspnCredentials,
+): Promise<void> {
+  const LEAGUE_ID = config.leagueId;
+  const OUT = dataDir(config);
+  const HISTORY_OUT = historyDir(config);
+
   await mkdir(OUT, { recursive: true });
 
   const log = (msg: string) => process.stdout.write(`${msg}\n`);
-  log(`league ${LEAGUE_ID}, season ${SEASON}`);
+  log(`league ${LEAGUE_ID} (${config.key}), season ${SEASON}`);
 
   // One stamp for the whole run. Every file carries it, and the client caches
   // on it, so a half-written snapshot can never look current.
@@ -226,8 +232,18 @@ async function main(): Promise<void> {
     0,
   );
   const league = parseLeague(raw, completedWeek);
+
+  /*
+   * Whether this league has actually drafted.
+   *
+   * Not a curiosity. ESPN keeps answering questions about a league that has not
+   * drafted, and some of its answers are placeholders that look exactly like
+   * real data — see the lineup and draft blocks below. A snapshot that cannot
+   * tell the difference publishes a roster nobody owns.
+   */
+  const drafted = Boolean(raw.draftDetail?.drafted);
   log(`  ${league.name}: ${teams.length} teams, week ${league.currentWeek}, ` +
-      `${completedWeek} complete`);
+      `${completedWeek} complete${drafted ? '' : ', not yet drafted'}`);
 
   // Everything the league scores, in either the base table or the D/ST
   // override, plus the usage keys — the snapshot keeps nothing else.
@@ -429,15 +445,28 @@ async function main(): Promise<void> {
      * someone moved a player. `mBoxscore` records the real thing, per week, so
      * the History and Optimal pages compare against what was actually started.
      */
-    const box = await espnFetch<any>(
-      leagueUrl({
-        season: SEASON,
-        leagueId: LEAGUE_ID,
-        views: ['mBoxscore'],
-        scoringPeriodId: week,
-      }),
-      creds,
-    );
+    /*
+     * Skipped entirely before the draft.
+     *
+     * `mBoxscore` does not return an empty roster for an undrafted league — it
+     * returns sixteen players a side in `rosterForCurrentScoringPeriod`, which
+     * is ESPN showing what it *would* auto-draft. It is indistinguishable in
+     * shape from a real lineup: distinct players, no overlap between teams,
+     * every slot filled. Recording it publishes a roster nobody owns, and the
+     * app then prices, ranks and recommends players against a team that does
+     * not exist. `mRoster` on the same league in the same request says zero.
+     */
+    const box = drafted
+      ? await espnFetch<any>(
+          leagueUrl({
+            season: SEASON,
+            leagueId: LEAGUE_ID,
+            views: ['mBoxscore'],
+            scoringPeriodId: week,
+          }),
+          creds,
+        )
+      : { schedule: [] };
 
     const lineups: Record<string, Record<string, string>> = {};
     for (const matchup of box.schedule ?? []) {
@@ -667,16 +696,26 @@ async function main(): Promise<void> {
   }
 
   // --- Draft ---------------------------------------------------------------
-  const draft = (raw.draftDetail?.picks ?? []).map((p: any) => ({
-    pickNumber: p.overallPickNumber,
-    round: p.roundId,
-    roundPick: p.roundPickNumber,
-    teamId: p.teamId,
-    playerId: String(p.playerId),
-    bidAmount: p.bidAmount ?? 0,
-    keeper: Boolean(p.keeper),
-    autoDraft: Boolean(p.autoDraftTypeId),
-  }));
+  /*
+   * Placeholder picks are dropped.
+   *
+   * An undrafted league still returns a full board — 120 or 128 rows, one per
+   * future selection — with `playerId` and `teamId` of -1. They are slots, not
+   * picks, and carrying them would draw a draft board of players who were never
+   * taken.
+   */
+  const draft = (raw.draftDetail?.picks ?? [])
+    .filter((p: any) => Number(p.playerId) > 0 && Number(p.teamId) > 0)
+    .map((p: any) => ({
+      pickNumber: p.overallPickNumber,
+      round: p.roundId,
+      roundPick: p.roundPickNumber,
+      teamId: p.teamId,
+      playerId: String(p.playerId),
+      bidAmount: p.bidAmount ?? 0,
+      keeper: Boolean(p.keeper),
+      autoDraft: Boolean(p.autoDraftTypeId),
+    }));
 
   const transactions = (raw.transactions ?? []).map((t: any) => ({
     id: t.id,
@@ -747,6 +786,11 @@ async function main(): Promise<void> {
 
   await write('index.json', {
     generatedAt,
+    // Carried so a payload can be traced back to the league it came from. The
+    // client picks the directory from its own config, so this is the check
+    // that the directory holds what the config thinks it does.
+    leagueKey: config.key,
+    leagueId: LEAGUE_ID,
     season: String(SEASON),
     priorSeason: String(HISTORY_SEASON),
     /** Finished seasons written under `seasons/`, newest first. */
@@ -759,6 +803,41 @@ async function main(): Promise<void> {
   });
 
   log('done');
+}
+
+/**
+ * Pulls every requested league in turn.
+ *
+ * Sequential rather than parallel, and deliberately. ESPN rate-limits this
+ * account hard on a Sunday — `espnFetch` already backs off through 429s — and
+ * two leagues pulling a few hundred weekly requests at once is the reliable way
+ * to turn a slow refresh into a failed one.
+ *
+ * One league failing does not abandon the rest. They are independent snapshots
+ * in independent directories, and a stale `oj-invitational` is no reason to
+ * skip a fresh `uk-bg`; the exit code still reports the failure so CI does not
+ * call a half-finished run a success.
+ */
+async function main(): Promise<void> {
+  await loadDotEnv();
+  const creds = credentials();
+  const leagues = requestedLeagues();
+  const failed: string[] = [];
+
+  for (const league of leagues) {
+    try {
+      await pullLeague(league, creds);
+    } catch (err: unknown) {
+      failed.push(league.key);
+      process.stderr.write(
+        `${league.key}: ${err instanceof Error ? err.message : String(err)}\n`,
+      );
+    }
+  }
+
+  if (failed.length > 0) {
+    throw new Error(`${failed.join(', ')} failed; ${leagues.length - failed.length} succeeded`);
+  }
 }
 
 main().catch((err: unknown) => {

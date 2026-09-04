@@ -8,7 +8,7 @@
  * the header went to the thing that actually varies — how old the snapshot is.
  */
 
-import { Suspense, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import { useLeague } from '../data/LeagueProvider';
 import { ErrorBoundary } from './ErrorBoundary';
@@ -49,9 +49,31 @@ function warm(item: NavItem) {
 }
 
 export function AppShell() {
-  const { status, data, error, progress, week, setWeek, refresh, refreshState, canPull } =
-    useLeague();
+  const {
+    status,
+    data,
+    error,
+    progress,
+    league,
+    week,
+    setWeek,
+    refresh,
+    refreshState,
+    canPull,
+  } = useLeague();
   const pulling = refreshState.phase === 'pulling' || refreshState.phase === 'reloading';
+
+  /*
+   * The tab title follows the league being viewed.
+   *
+   * `index.html` can only carry one, and with more than one league a static
+   * title is wrong for every league but the first — including in the tab strip,
+   * bookmarks and the window list, which is where someone with both leagues
+   * open tells them apart.
+   */
+  useEffect(() => {
+    document.title = `${data?.league.name ?? league.name} — League Analytics`;
+  }, [data, league.name]);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const headerHidden = useHideOnScroll();
   const location = useLocation();
@@ -92,7 +114,11 @@ export function AppShell() {
       <header className={`topbar${headerHidden && !settingsOpen ? ' is-hidden' : ''}`}>
         <div className="topbar__inner">
           <div className="row" style={{ gap: 10, minWidth: 0 }}>
-            <span className="brand">UK-BG</span>
+            {/* The badge is the *configured* short name and the text beside
+                it is the league's own name from ESPN. Two different things:
+                the badge has to be readable at a glance and stay put while a
+                league loads, which a name pulled from a snapshot cannot. */}
+            <span className="brand">{league.name}</span>
             <span className="topbar__league">
               {data ? data.league.name : 'Loading…'}
             </span>

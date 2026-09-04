@@ -10,6 +10,9 @@
  */
 
 import { readFileSync } from 'node:fs';
+import { activeLeague, dataUrl } from './league-paths';
+
+const DATA = dataUrl(activeLeague());
 import {
   advance,
   featuresFrom,
@@ -211,7 +214,7 @@ process.stdout.write('\nthe shipped model\n');
 let shipped: ProjectionModel | null = null;
 try {
   shipped = JSON.parse(
-    readFileSync(new URL('../public/data/projection.json', import.meta.url), 'utf8'),
+    readFileSync(new URL('projection.json', DATA), 'utf8'),
   ) as ProjectionModel;
 } catch {
   shipped = null;
@@ -221,7 +224,7 @@ if (!shipped) {
   process.stdout.write('  note  no projection.json — run npm run fit:projection\n');
 } else {
   const index = JSON.parse(
-    readFileSync(new URL('../public/data/index.json', import.meta.url), 'utf8'),
+    readFileSync(new URL('index.json', DATA), 'utf8'),
   ) as { generatedAt: number };
 
   check(

@@ -14,7 +14,7 @@ import { useLeagueData } from '../data/LeagueProvider';
 import { weekForecasts } from '../data/predictions';
 import { playerHeadshot, teamLogo } from '../lib/assets';
 import { fmt1, fmtPct, fmtSigned, MatchupChip, StatusBadge, ValueChip } from './primitives';
-import { MATCHUP_INFLUENCE, MATCHUP_INFLUENCE_FLOOR } from '../lib/matchup';
+import { MATCHUP_INFLUENCE_FLOOR } from '../lib/matchup';
 import { enrichPlayer } from '../data/selectors';
 import { VALUE_WEIGHTS } from '../lib/value';
 import { SEASON_WEIGHTS } from '../lib/season-value';
@@ -633,7 +633,7 @@ export function PlayerModal({ pid, week, onClose }: Props) {
               <h3 className="section-title">Schedule &amp; matchups</h3>
               <p className="tiny muted" style={{ marginTop: -4, marginBottom: 8 }}>
                 Matchup 0&ndash;100, higher is softer.
-                {p.group && MATCHUP_INFLUENCE[p.group] < MATCHUP_INFLUENCE_FLOOR
+                {p.group && data.matchupInfluence[p.group] < MATCHUP_INFLUENCE_FLOOR
                   ? ' Dimmed: the opponent barely moves this position.'
                   : ''}
               </p>

@@ -29,14 +29,14 @@
  */
 
 import { readFile } from 'node:fs/promises';
-import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { join } from 'node:path';
 
 import { compileScoring, createScorer } from '../src/lib/scoring';
 import { buildMatchupIndex } from '../src/lib/matchup';
 import { POSITION_GROUPS, type League, type PositionGroup, type Player, type StatLine } from '../src/lib/types';
+import { activeLeague, dataDir } from './league-paths';
 
-const DATA = join(dirname(fileURLToPath(import.meta.url)), '..', 'public', 'data');
+const DATA = dataDir(activeLeague());
 
 async function readJson<T>(name: string): Promise<T> {
   return JSON.parse(await readFile(join(DATA, name), 'utf8')) as T;

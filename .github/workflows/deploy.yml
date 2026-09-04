@@ -1,8 +1,12 @@
-# Refreshes the snapshot and deploys the site.
+# Refreshes every league's snapshot and deploys the site.
 #
 # The snapshot step is the only place the ESPN credentials exist. They come from
 # repository secrets, are used by a Node script, and never reach the bundle —
-# `public/data` is plain league JSON with no cookie in it.
+# `public/data/<league>` is plain league JSON with no cookie in it.
+#
+# One cookie pair covers every league in `src/lib/leagues.ts`: they are leagues
+# the same ESPN account belongs to, and ESPN authorises the account rather than
+# the league. A league on a different account would need its own secrets.
 #
 # The cron is deliberately uneven. ESPN's numbers only move when football is
 # being played, so this refreshes hourly through the American Sunday afternoon
@@ -48,6 +52,20 @@ jobs:
 
       - run: npm ci
 
+      # Resolved once, and checked. A bare `$(npm run --silent leagues)` that
+      # failed would expand to nothing, every loop below would run zero times,
+      # and the deploy would publish a stale snapshot while reporting success.
+      - name: Resolve the configured leagues
+        id: leagues
+        run: |
+          keys="$(npm run --silent leagues)"
+          if [[ -z "${keys// }" ]]; then
+            echo "::error::No leagues configured — check src/lib/leagues.ts"
+            exit 1
+          fi
+          echo "keys=$keys" >> "$GITHUB_OUTPUT"
+          echo "pulling: $keys"
+
       # A first deploy is allowed before the repository secrets are configured:
       # it serves the committed snapshot and makes the page available. Once both
       # cookies exist, every push, scheduled run and manual run pulls ESPN first.
@@ -64,10 +82,12 @@ jobs:
             echo "::notice::Deploying the committed snapshot. Add ESPN_SWID and ESPN_S2 repository secrets to enable live pulls."
           fi
 
-      - name: Refresh the snapshot from ESPN
+      # Pulls every configured league, one after another. League ids live in
+      # `src/lib/leagues.ts` rather than in a repository variable, so adding a
+      # league is a code change that ships with the switcher entry for it.
+      - name: Refresh every league's snapshot from ESPN
         if: steps.espn.outputs.configured == 'true'
         env:
-          ESPN_LEAGUE_ID: ${{ vars.ESPN_LEAGUE_ID || '390483100' }}
           ESPN_SEASON: ${{ vars.ESPN_SEASON }}
           ESPN_SWID: ${{ secrets.ESPN_SWID }}
           ESPN_S2: ${{ secrets.ESPN_S2 }}
@@ -89,9 +109,17 @@ jobs:
       # and takes about two minutes to reproduce, in the ordinary case, a
       # byte-identical file. It runs when a season boundary or a settings change
       # means it has to.
+      # Per league: each has its own scoring table, so each has its own fitted
+      # models, its own inputs hash and its own restamp decision.
       - name: Carry the fitted models onto the new snapshot, or refit
         if: steps.espn.outputs.configured == 'true'
-        run: npm run restamp || (npm run fit:priors && npm run fit:projection)
+        run: |
+          for league in ${{ steps.leagues.outputs.keys }}; do
+            echo "::group::$league"
+            ESPN_LEAGUE=$league npm run restamp \
+              || (ESPN_LEAGUE=$league npm run fit:priors && ESPN_LEAGUE=$league npm run fit:projection)
+            echo "::endgroup::"
+          done
 
       # The scoring engine is checked against ESPN's own applied totals on every
       # deploy, over the snapshot that is about to ship. A stat id ESPN renumbers
@@ -103,8 +131,15 @@ jobs:
       # verify-history.ts for why that is not optional.
       - name: Verify scoring against ESPN's own totals
         if: steps.espn.outputs.configured == 'true'
-        run: npm run verify
+        run: |
+          for league in ${{ steps.leagues.outputs.keys }}; do
+            echo "::group::$league"
+            ESPN_LEAGUE=$league npm run verify
+            echo "::endgroup::"
+          done
 
+      # These read no snapshot — they check the library functions against
+      # generated cases — so they run once rather than per league.
       - name: Verify the models
         if: steps.espn.outputs.configured == 'true'
         run: |

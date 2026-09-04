@@ -1,7 +1,12 @@
 /**
  * Settings popover.
  *
- * Two things live here, and both exist because the snapshot cannot know them.
+ * Three things live here, and each exists because the snapshot cannot know it.
+ *
+ * *Which league* — one ESPN account belongs to several, each pulled into its own
+ * snapshot with its own scoring and its own fitted models. Switching reloads
+ * from the other directory rather than re-deriving anything, so the two can
+ * never be half-mixed.
  *
  * *Your team* — the snapshot is generated from one ESPN account, but anybody in
  * the league can open the page, so the app has no way to infer whose roster to
@@ -30,8 +35,17 @@ function ago(timestamp: number): string {
 }
 
 export function SettingsMenu({ open, onClose }: { open: boolean; onClose: () => void }) {
-  const { data, selectedTeamId, setSelectedTeamId, refresh, refreshState, canPull } =
-    useLeague();
+  const {
+    data,
+    leagues,
+    league,
+    setLeagueKey,
+    selectedTeamId,
+    setSelectedTeamId,
+    refresh,
+    refreshState,
+    canPull,
+  } = useLeague();
   const busy = refreshState.phase === 'pulling' || refreshState.phase === 'reloading';
   const ref = useRef<HTMLDivElement>(null);
 
@@ -63,12 +77,31 @@ export function SettingsMenu({ open, onClose }: { open: boolean; onClose: () => 
     <div className="settings" ref={ref} role="dialog" aria-label="Settings">
       <div className="settings__title">Settings</div>
 
+      {leagues.length > 1 && (
+        <label className="settings__field">
+          <span className="settings__label">League</span>
+          <select
+            className="select"
+            value={league.key}
+            onChange={(e) => setLeagueKey(e.target.value)}
+            disabled={busy}
+          >
+            {leagues.map((option) => (
+              <option key={option.key} value={option.key}>
+                {option.name}
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
+
       <label className="settings__field">
         <span className="settings__label">My team</span>
         <select
           className="select"
           value={selectedTeamId ?? ''}
           onChange={(e) => setSelectedTeamId(Number(e.target.value))}
+          disabled={!data}
         >
           {(data?.teams ?? []).map((team) => (
             <option key={team.teamId} value={team.teamId}>
@@ -79,8 +112,14 @@ export function SettingsMenu({ open, onClose }: { open: boolean; onClose: () => 
       </label>
 
       <p className="settings__hint">
-        Every page opens on this team. Scoring, rosters and results are read from{' '}
-        <strong>{data?.league.name}</strong> ({data?.season}).
+        {data ? (
+          <>
+            Every page opens on this team. Scoring, rosters and results are read
+            from <strong>{data.league.name}</strong> ({data.season}).
+          </>
+        ) : (
+          <>Loading {league.name}…</>
+        )}
       </p>
 
       {data && (

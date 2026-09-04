@@ -22,14 +22,14 @@
 
 import { createHash } from 'node:crypto';
 import { readFileSync, readdirSync } from 'node:fs';
-import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { join } from 'node:path';
 
 import type { League, Player } from '../src/lib/types';
+import { activeLeague, dataDir, historyDir } from './league-paths';
 
-const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
-const DATA = join(ROOT, 'public', 'data');
-const HISTORY = join(ROOT, 'history');
+const LEAGUE = activeLeague();
+const DATA = dataDir(LEAGUE);
+const HISTORY = historyDir(LEAGUE);
 
 export function fitInputsHash(): string {
   const hash = createHash('sha256');

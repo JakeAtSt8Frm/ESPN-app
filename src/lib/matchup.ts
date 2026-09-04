@@ -158,8 +158,16 @@ const TWO_WAY_RIDGE = 3;
  * volume is assigned during the week and a bad matchup takes carries away far
  * more slowly than it takes away sacks and turnovers.
  *
- * `fit:priors` re-measures these every run and fails if the shipped table has
- * drifted from what the data says, so these constants cannot quietly rot.
+ * These are the **fallback**. The measurement depends on the league's scoring
+ * table rather than on football — a six-point passing touchdown roughly doubles
+ * how much the opponent matters to a quarterback — so each league's `fit:priors`
+ * writes its own table into `priors.json`, and `LeagueData.matchupInfluence` is
+ * what the app actually reads. These values are what a snapshot gets before it
+ * has ever been fit, and they track the default league.
+ *
+ * `fit:priors` re-measures them every run and fails, for that league, if the
+ * shipped table has drifted from what the data says — so the fallback cannot
+ * quietly rot.
  *
  * This deliberately does **not** rescale the score. Rescaling by influence was
  * tried in the model this one descends from and could not be justified — it

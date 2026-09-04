@@ -72,13 +72,15 @@ import {
   opportunities,
 } from '../src/lib/scoring';
 import { POSITION_GROUPS, type League, type Player, type PositionGroup, type StatLine } from '../src/lib/types';
+import { activeLeague, dataUrl, historyUrl } from './league-paths';
 
-const DATA = new URL('../public/data/', import.meta.url);
+const LEAGUE = activeLeague();
+const DATA = dataUrl(LEAGUE);
 const read = <T>(name: string): T =>
   JSON.parse(readFileSync(new URL(name, DATA), 'utf8')) as T;
 
 /** Raw finished seasons, which live outside `public/` — see `snapshot.ts`. */
-const HISTORY = new URL('../history/', import.meta.url);
+const HISTORY = historyUrl(LEAGUE);
 const readHistory = <T>(name: string): T =>
   JSON.parse(readFileSync(new URL(name, HISTORY), 'utf8')) as T;
 

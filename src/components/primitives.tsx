@@ -9,7 +9,8 @@
 
 import { useTheme } from './ThemeProvider';
 import { matchupScoreFill, valueScoreFill } from '../lib/colors';
-import { MATCHUP_INFLUENCE, MATCHUP_INFLUENCE_FLOOR } from '../lib/matchup';
+import { MATCHUP_INFLUENCE_FLOOR } from '../lib/matchup';
+import { useMatchupInfluence } from '../data/LeagueProvider';
 import { fmtSlot } from '../lib/labels';
 import { statusTone } from '../lib/status';
 import type { PlayerStatus, PositionGroup, StatusLabel } from '../lib/types';
@@ -81,7 +82,8 @@ export function MatchupChip({
 }) {
   const { mode } = useTheme();
   const { background, ink } = matchupScoreFill(score, mode);
-  const influence = group ? MATCHUP_INFLUENCE[group] : 1;
+  const influenceByGroup = useMatchupInfluence();
+  const influence = group ? influenceByGroup[group] : 1;
   const weak = influence < MATCHUP_INFLUENCE_FLOOR;
 
   return (

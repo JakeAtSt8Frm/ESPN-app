@@ -9,8 +9,7 @@
  */
 
 import { readFile } from 'node:fs/promises';
-import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { join } from 'node:path';
 
 import {
   fitResidualModel,
@@ -25,8 +24,9 @@ import { clamp, quantile } from '../src/lib/stats';
 import type { League, Player, PositionGroup, StatLine } from '../src/lib/types';
 import { POSITION_GROUPS } from '../src/lib/types';
 import { DEFAULT_BOOM_BUST } from '../src/lib/value';
+import { activeLeague, dataDir } from './league-paths';
 
-const DATA = join(dirname(fileURLToPath(import.meta.url)), '..', 'public', 'data');
+const DATA = dataDir(activeLeague());
 const PLAY_RATE_PRIOR = 4;
 const EPSILON = 1e-6;
 

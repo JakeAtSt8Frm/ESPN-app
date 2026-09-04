@@ -223,6 +223,16 @@ export function TeamsPage() {
               </span>
             </div>
 
+            {/* A league that has not drafted has no roster to draw, and an
+                empty card reads as a failure rather than as the truth. ESPN
+                serves a projected auto-draft lineup for these teams, which
+                `snapshot.ts` deliberately refuses — see the lineup block there. */}
+            {starters.length === 0 && bench.length === 0 && (
+              <div className="card-pad small muted" style={{ textAlign: 'center' }}>
+                No roster yet — {data.league.name} has not drafted.
+              </div>
+            )}
+
             {grouped.map((group) => (
               <div key={group.key}>
                 <div className="group-head">

@@ -31,20 +31,21 @@
  */
 
 import { readFile } from 'node:fs/promises';
-import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { join } from 'node:path';
 
 import { compileScoring, createScorer, hasPlayed } from '../src/lib/scoring';
 import { ESPN_POSITION_IDS } from '../src/lib/types';
 import type { League, Player, PositionGroup, StatLine } from '../src/lib/types';
+import { activeLeague, dataDir, historyDir } from './league-paths';
 
-const DATA = join(dirname(fileURLToPath(import.meta.url)), '..', 'public', 'data');
+const LEAGUE = activeLeague();
+const DATA = dataDir(LEAGUE);
 
 const readJson = async <T>(...parts: string[]): Promise<T> =>
   JSON.parse(await readFile(join(DATA, ...parts), 'utf8')) as T;
 
 /** Raw finished seasons, which live outside `public/` — see `snapshot.ts`. */
-const HISTORY = join(dirname(fileURLToPath(import.meta.url)), '..', 'history');
+const HISTORY = historyDir(LEAGUE);
 const readHistory = async <T>(name: string): Promise<T> =>
   JSON.parse(await readFile(join(HISTORY, name), 'utf8')) as T;
 
