@@ -1,0 +1,131 @@
+# Refreshes the snapshot and deploys the site.
+#
+# The snapshot step is the only place the ESPN credentials exist. They come from
+# repository secrets, are used by a Node script, and never reach the bundle —
+# `public/data` is plain league JSON with no cookie in it.
+#
+# The cron is deliberately uneven. ESPN's numbers only move when football is
+# being played, so this refreshes hourly through the American Sunday afternoon
+# and evening, twice on Monday and Thursday nights, and once a day otherwise.
+# A schedule that fires every hour all week would spend most of its runs
+# rewriting an identical file.
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+  schedule:
+    # Sunday 17:00-23:00 UTC (1pm-7pm ET) — the main slate, hourly.
+    - cron: '0 17-23 * * 0'
+    # Sunday night into Monday, and the Monday/Thursday night games.
+    - cron: '0 0-4 * * 1,2,5'
+    # A daily refresh the rest of the week, for waivers, trades and injuries.
+    - cron: '0 12 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# One deploy at a time. A cron firing while a push is deploying should wait
+# rather than race, but a queued cron run is not worth keeping — the next one
+# fetches fresher data anyway.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      # A first deploy is allowed before the repository secrets are configured:
+      # it serves the committed snapshot and makes the page available. Once both
+      # cookies exist, every push, scheduled run and manual run pulls ESPN first.
+      - name: Check ESPN credentials
+        id: espn
+        env:
+          ESPN_SWID: ${{ secrets.ESPN_SWID }}
+          ESPN_S2: ${{ secrets.ESPN_S2 }}
+        run: |
+          if [[ -n "$ESPN_SWID" && -n "$ESPN_S2" ]]; then
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Deploying the committed snapshot. Add ESPN_SWID and ESPN_S2 repository secrets to enable live pulls."
+          fi
+
+      - name: Refresh the snapshot from ESPN
+        if: steps.espn.outputs.configured == 'true'
+        env:
+          ESPN_LEAGUE_ID: ${{ vars.ESPN_LEAGUE_ID || '390483100' }}
+          ESPN_SEASON: ${{ vars.ESPN_SEASON }}
+          ESPN_SWID: ${{ secrets.ESPN_SWID }}
+          ESPN_S2: ${{ secrets.ESPN_S2 }}
+        run: npm run snapshot
+
+      # Every file in the snapshot carries its timestamp, and the client refuses
+      # to use a fitted model whose stamp disagrees with the index — which is
+      # what stops a stale model shipping beside fresh data.
+      #
+      # A refreshed snapshot therefore leaves the committed models looking stale
+      # even though nothing they read has moved: they are fitted on the league's
+      # scoring table, each player's position and three finished seasons, none
+      # of which change because Sunday's scores came in. Each fit records a hash
+      # of those inputs, so `restamp` carries them forward when the hash still
+      # matches and exits non-zero when it does not.
+      #
+      # Refitting is the fallback rather than the default because it is not
+      # free: `fit:projection` grows twenty thousand trees over three seasons
+      # and takes about two minutes to reproduce, in the ordinary case, a
+      # byte-identical file. It runs when a season boundary or a settings change
+      # means it has to.
+      - name: Carry the fitted models onto the new snapshot, or refit
+        if: steps.espn.outputs.configured == 'true'
+        run: npm run restamp || (npm run fit:priors && npm run fit:projection)
+
+      # The scoring engine is checked against ESPN's own applied totals on every
+      # deploy, over the snapshot that is about to ship. A stat id ESPN renumbers
+      # between seasons would fail here rather than quietly score zero in
+      # somebody's lineup.
+      #
+      # `verify` also cross-checks the finished-season history against the one
+      # season reachable through a second, independent endpoint — see
+      # verify-history.ts for why that is not optional.
+      - name: Verify scoring against ESPN's own totals
+        if: steps.espn.outputs.configured == 'true'
+        run: npm run verify
+
+      - name: Verify the models
+        if: steps.espn.outputs.configured == 'true'
+        run: |
+          npm run verify:forecast
+          npm run verify:lineup
+          npm run verify:power
+          npm run verify:trade
+          npm run verify:season
+
+      - run: npm run build
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

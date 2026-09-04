@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
+    <!-- viewport-fit=cover lets the bottom nav sit against the iOS safe area -->
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, viewport-fit=cover"
+    />
+    <meta name="description" content="Analytics for the UK-BG ESPN fantasy league." />
+    <meta name="theme-color" content="#1a1a19" />
+
+    <!--
+      Installable. The manifest is what Android and desktop Chrome read: without
+      it the app is not installable at all there, however many Apple meta tags
+      are present. Relative URLs inside it resolve against the manifest's own
+      location, which keeps hosted builds portable across project and user
+      pages. The app is deployed as a normal multi-file site, like SLA-app.
+    -->
+    <link rel="manifest" href="./manifest.webmanifest" />
+
+    <!-- iOS reads none of the above, so it keeps its own set. -->
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="UK-BG" />
+
+    <!--
+      Only espncdn is preconnected. League data is served as static JSON, so the
+      one cross-origin dependency is optional headshots and team logos.
+    -->
+    <link rel="preconnect" href="https://a.espncdn.com" crossorigin />
+    <link rel="dns-prefetch" href="https://a.espncdn.com" />
+
+    <title>UK-BG — League Analytics</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

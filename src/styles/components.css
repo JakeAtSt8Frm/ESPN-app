@@ -1,0 +1,1507 @@
+/* ------------------------------------------------------------- topbar --- */
+
+/*
+ * A restrained accent wash across the header: enough colour to give the app an
+ * identity and to separate chrome from content, stopping well short of a
+ * saturated bar. The gradient fades out by the right edge so the controls sit
+ * on plain surface and stay legible.
+ */
+.topbar {
+  position: sticky;
+  top: 0;
+  z-index: 40;
+  background:
+    linear-gradient(
+      100deg,
+      color-mix(in srgb, var(--accent) 14%, transparent) 0%,
+      color-mix(in srgb, var(--accent) 5%, transparent) 42%,
+      transparent 72%
+    ),
+    color-mix(in srgb, var(--surface) 90%, transparent);
+  backdrop-filter: saturate(180%) blur(12px);
+  border-bottom: 1px solid var(--border);
+  /* A hairline of accent along the bottom ties the header to the active tab. */
+  box-shadow: inset 0 -2px 0 -1px color-mix(in srgb, var(--accent) 30%, transparent);
+}
+
+.topbar__inner {
+  max-width: var(--max-width);
+  margin: 0 auto;
+  padding: 10px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.brand {
+  font-weight: 900;
+  font-size: 18px;
+  letter-spacing: -0.02em;
+  padding: 3px 9px;
+  border-radius: var(--radius-sm);
+  background: linear-gradient(135deg, var(--accent), var(--accent-deep));
+  color: var(--accent-ink);
+  box-shadow: 0 1px 6px color-mix(in srgb, var(--accent) 40%, transparent);
+}
+
+.topbar__league {
+  font-weight: 700;
+  font-size: 14px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/*
+ * Header icon buttons (theme, refresh, settings). The glyphs are a mix of
+ * symbols that a phone would otherwise render as full-colour emoji (☀ ☾ ⚙) and
+ * a plain text symbol that would not (⟳) — which left the refresh control
+ * looking noticeably smaller than its neighbours on mobile. Forcing text
+ * presentation and a shared glyph size makes all three render at the same
+ * weight, matching the monochrome icons used elsewhere in the app.
+ */
+.topbar__icon {
+  font-size: 17px;
+  line-height: 1;
+  font-variant-emoji: text;
+}
+
+/*
+ * The refresh arrow (⟳) is a lighter, smaller glyph than the gear (⚙), so at a
+ * shared font-size it reads as the runt of the row. Bump it on its own so the
+ * two icons look the same size.
+ */
+.topbar__icon--refresh {
+  font-size: 19px;
+}
+
+/*
+ * A refresh that pulls from ESPN takes about a minute, which is far too long to
+ * leave a button looking idle. The glyph is already a circular arrow, so it
+ * spins rather than being swapped for a spinner — the control stays exactly
+ * where it was and nothing reflows underneath it.
+ */
+.topbar__icon--refresh.is-busy {
+  animation: topbar-refresh-spin 1.1s linear infinite;
+  opacity: 0.75;
+  cursor: progress;
+}
+
+@keyframes topbar-refresh-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .topbar__icon--refresh.is-busy {
+    animation: none;
+    opacity: 0.5;
+  }
+}
+
+@media (max-width: 760px) {
+  .topbar__icon {
+    font-size: 19px;
+    min-width: 40px;
+  }
+
+  .topbar__icon--refresh {
+    font-size: 22px;
+  }
+}
+
+/* Desktop tab strip */
+.tabs {
+  max-width: var(--max-width);
+  margin: 0 auto;
+  padding: 0 16px;
+  display: flex;
+  gap: 2px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.tabs__link {
+  padding: 10px 14px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  border-bottom: 2px solid transparent;
+  white-space: nowrap;
+}
+
+.tabs__link:hover {
+  color: var(--text-primary);
+}
+
+.tabs__link.is-active {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+}
+
+/* Bottom tab bar — phones only */
+.bottom-nav {
+  display: none;
+}
+
+@media (max-width: 760px) {
+  .tabs {
+    display: none;
+  }
+
+  /*
+   * The header slides away as you scroll down and returns the moment you scroll
+   * up. On a phone the header plus its controls costs roughly a fifth of the
+   * screen, which is a lot to spend permanently on chrome when you are reading
+   * a 21-row lineup.
+   */
+  .topbar {
+    transition: transform 0.22s ease;
+    will-change: transform;
+  }
+
+  .topbar.is-hidden {
+    transform: translateY(-100%);
+  }
+
+  .bottom-nav {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 50;
+    display: flex;
+    justify-content: space-around;
+    background: color-mix(in srgb, var(--surface) 94%, transparent);
+    backdrop-filter: saturate(180%) blur(12px);
+    border-top: 1px solid var(--border);
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+
+  .bottom-nav__link {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    padding: 8px 2px 6px;
+    min-height: 52px;
+    color: var(--text-muted);
+    font-size: 10px;
+    font-weight: 600;
+  }
+
+  .bottom-nav__link.is-active {
+    color: var(--accent);
+  }
+
+  .bottom-nav__icon {
+    font-size: 17px;
+    line-height: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .topbar {
+    transition: none;
+  }
+}
+
+.topbar__notice {
+  max-width: var(--max-width);
+  margin: 0 auto;
+  padding: 5px 16px 7px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  border-top: 1px solid var(--border);
+}
+
+/* ----------------------------------------------------------- settings --- */
+
+/*
+ * The gear's positioning context on desktop, where the button sits at the right
+ * edge of the header and `right: 0` lands the panel inside the viewport. On a
+ * phone it becomes `static` — see the note on the mobile block below.
+ */
+.topbar__settings {
+  position: relative;
+}
+
+.settings {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 60;
+  width: min(310px, calc(100vw - 24px));
+  max-height: calc(100dvh - 140px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  background: var(--surface-raised);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-lg);
+}
+
+.settings__title {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.settings__field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.settings__label {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.settings__hint {
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--text-secondary);
+}
+
+.settings__warn {
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--text-secondary);
+  padding: 7px 9px;
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--tone-bust) 14%, transparent);
+  border: 1px solid color-mix(in srgb, var(--tone-bust) 32%, transparent);
+}
+
+.settings__meta {
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+}
+
+/*
+ * On a phone `.topbar__inner` wraps, which drops the controls onto their own
+ * line starting at the *left* of the header — so the gear is nowhere near the
+ * right edge. Anchoring a 310px panel to that button with `right: 0` pushed its
+ * left half off-screen, since nothing clamped it to the viewport.
+ *
+ * Anchoring to the header instead of the button fixes it by construction: the
+ * topbar is always full-width, so a left/right inset is measured from the screen
+ * edges and the panel cannot overflow regardless of where the button lands or
+ * how the controls happen to wrap. It also sits below the whole header — clear
+ * of the season and week selects it would otherwise cover.
+ */
+@media (max-width: 760px) {
+  .topbar__settings {
+    position: static;
+  }
+
+  .settings {
+    left: 12px;
+    right: 12px;
+    top: calc(100% + 6px);
+    width: auto;
+    /* Clears the fixed bottom nav. Only binds on the shortest phones with the
+       roster override expanded, where the panel would otherwise run under it. */
+    max-height: calc(100dvh - 230px);
+  }
+}
+
+.progress {
+  max-width: 320px;
+  margin: 12px auto 0;
+  height: 4px;
+  border-radius: 999px;
+  background: var(--surface-sunken);
+  overflow: hidden;
+}
+
+.progress span {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+  transition: width 0.25s ease;
+}
+
+/* --------------------------------------------------------- player row --- */
+
+.player-row {
+  display: grid;
+  grid-template-columns: auto auto 1fr auto auto auto auto;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 12px;
+  text-align: left;
+  border-bottom: 1px solid var(--grid);
+  transition: background 0.12s ease;
+}
+
+.player-row--ranked {
+  grid-template-columns: 3ch auto auto minmax(0, 1fr) auto auto auto auto;
+}
+
+.player-row:hover {
+  background: var(--surface-sunken);
+}
+
+.player-row__list-rank {
+  color: var(--text-muted);
+  font-size: 13px;
+  font-weight: 700;
+  text-align: right;
+}
+
+.avatar {
+  border-radius: 50%;
+  object-fit: cover;
+  background: var(--surface-sunken);
+  flex-shrink: 0;
+}
+
+.player-row__id {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+/* Name and standing share one line: the pills sit immediately after the name
+   and never wrap away from it, so a player reads as a single unit. */
+.player-row__title {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+}
+
+.player-row__name {
+  font-weight: 650;
+  font-size: 14px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  /* Let the name truncate before the pills get squeezed. */
+  flex: 0 1 auto;
+  min-width: 3ch;
+}
+
+.player-row__title .chip {
+  flex: 0 0 auto;
+}
+
+.player-row__ranks {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex: 0 0 auto;
+  white-space: nowrap;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.player-row__rank--total {
+  color: var(--rank-total);
+}
+
+.player-row__rank--ppg {
+  color: var(--rank-ppg);
+}
+
+.player-row__rank--boom {
+  color: var(--rank-boom);
+}
+
+.player-row__rank-separator {
+  color: var(--text-muted);
+  font-weight: 400;
+}
+
+/*
+ * The year the three ranks describe.
+ *
+ * Present only while they report a finished season, which is the whole of
+ * September — see `PositionRanks`. Muted and small because it is a qualifier on
+ * three numbers rather than a fourth number, but never hidden by a container
+ * query: it is the difference between "#4 this year" and "#4 last year", and a
+ * width that cannot afford four characters cannot afford the ranks either.
+ */
+.player-row__rank-season {
+  color: var(--text-muted);
+  font-weight: 600;
+  font-size: 10px;
+  letter-spacing: 0.02em;
+}
+
+.player-row__matchup {
+  display: flex;
+}
+
+.player-row__num {
+  min-width: 46px;
+  text-align: right;
+  font-size: 14px;
+}
+
+/*
+ * The app projection, sitting just left of ESPN's.
+ *
+ * Deliberately recessive. It is the second opinion, not the headline, and a
+ * row carrying two numbers of equal weight reads as though something has gone
+ * wrong with the layout. It is also the first thing to go when the row runs out
+ * of width — the container query below drops it before anything load-bearing.
+ */
+.player-row__own {
+  color: var(--text-muted);
+  margin-right: 6px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.projection-app {
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.player-row__status {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+  min-width: 52px;
+}
+
+/*
+ * The row adapts to ITS CONTAINER, not the viewport.
+ *
+ * This has to be a container query. A roster row sits inside a half-width grid
+ * column on desktop, so keying off viewport width meant a 730px window rendered
+ * all seven columns into a ~350px pane and crushed the name column to 18px —
+ * the player's name disappeared entirely while the window was "desktop sized".
+ */
+@container player-list (max-width: 520px) {
+  .player-row {
+    grid-template-columns: auto auto 1fr auto auto auto;
+    gap: 8px;
+    padding: 8px 10px;
+  }
+
+  .player-row--ranked {
+    grid-template-columns: 3ch auto auto minmax(0, 1fr) auto auto auto;
+  }
+
+  /*
+   * One score column at this width. `--minor` is set by the row on whichever of
+   * projection and actual carries less: the projection once a player has played,
+   * and the (empty) actual before he has. Both remain in the detail sheet.
+   */
+  .player-row__num--minor {
+    display: none;
+  }
+
+  .player-row__own {
+    display: none;
+  }
+}
+
+/*
+ * Narrower still (phones): the name plus Value plus positional ranks needs about
+ * 500px. Below that the name takes the first line on its own and the metrics wrap
+ * beneath it — the name is what you scan for, so it keeps the room.
+ *
+ * The avatar goes too. It is decorative here (the name and position identify
+ * the player), and dropping it returns ~44px to the metrics, which is the
+ * difference between them fitting on one line and spilling onto two.
+ */
+@container player-list (max-width: 430px) {
+  .player-row {
+    grid-template-columns: auto 1fr auto auto auto;
+  }
+
+  .player-row--ranked {
+    grid-template-columns: 3ch auto minmax(0, 1fr) auto auto auto;
+  }
+
+  .player-row .avatar {
+    display: none;
+  }
+
+  .player-row__title {
+    flex-wrap: wrap;
+    row-gap: 3px;
+  }
+
+  .player-row__name {
+    flex: 1 0 100%;
+    min-width: 0;
+  }
+
+  .player-row__status {
+    min-width: 44px;
+  }
+}
+
+@container player-list (max-width: 360px) {
+  .player-row--ranked {
+    grid-template-columns: 3ch auto minmax(0, 1fr);
+  }
+
+  .player-row--ranked .player-row__matchup,
+  .player-row--ranked .player-row__num,
+  .player-row--ranked .player-row__status {
+    display: none;
+  }
+}
+
+/* -------------------------------------------------------- player card --- */
+
+.player-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  width: 100%;
+  text-align: left;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-sm);
+  transition: transform 0.12s ease, box-shadow 0.12s ease;
+}
+
+.player-card:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--shadow);
+}
+
+.player-card__scores {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  padding: 8px 10px;
+  background: var(--surface-sunken);
+  border-radius: var(--radius-sm);
+}
+
+/* ------------------------------------------------------------- sheet --- */
+
+.sheet-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  animation: fade-in 0.15s ease;
+}
+
+@media (min-width: 761px) {
+  .sheet-backdrop {
+    align-items: center;
+    padding: 24px;
+  }
+}
+
+.sheet {
+  background: var(--surface);
+  width: 100%;
+  max-width: 720px;
+  max-height: 92dvh;
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+  box-shadow: var(--shadow-lg);
+  display: flex;
+  flex-direction: column;
+  animation: slide-up 0.2s ease;
+  outline: none;
+}
+
+@media (min-width: 761px) {
+  .sheet {
+    border-radius: var(--radius-lg);
+    max-height: 88vh;
+  }
+}
+
+.sheet__grabber {
+  width: 36px;
+  height: 4px;
+  border-radius: 999px;
+  background: var(--border-strong);
+  margin: 8px auto 0;
+}
+
+@media (min-width: 761px) {
+  .sheet__grabber {
+    display: none;
+  }
+}
+
+.sheet__header {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.sheet__avatar {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  object-fit: cover;
+  background: var(--surface-sunken);
+  flex-shrink: 0;
+}
+
+.sheet__body {
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+  padding-bottom: calc(24px + env(safe-area-inset-bottom));
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes slide-up {
+  from {
+    transform: translateY(16px);
+    opacity: 0;
+  }
+}
+
+/* ------------------------------------------------------- metric grid --- */
+
+.metric-grid {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(auto-fit, minmax(104px, 1fr));
+}
+
+.metric {
+  padding: 8px 10px;
+  background: var(--surface-sunken);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+}
+
+/* ----------------------------------------------------------- heatmap --- */
+
+.heatmap__caption {
+  align-items: flex-start;
+  flex-wrap: wrap;
+  padding: 12px 14px 8px;
+}
+
+.heatmap__title {
+  flex: 1 1 180px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-size: 14px;
+}
+
+.heatmap__caption .btn {
+  flex: 0 0 auto;
+  margin-left: auto;
+}
+
+.heatmap-scroll {
+  overscroll-behavior-x: contain;
+}
+
+.heatmap {
+  width: 100%;
+  table-layout: fixed;
+  border-collapse: separate;
+  border-spacing: 2px; /* the 2px surface gap between fills */
+  font-size: 11px;
+  /* Breathing room on both ends so the Total column doesn't sit flush against
+     the card edge, and so the first column clears the sticky team names. */
+  padding: 0 8px 2px 4px;
+}
+
+.heatmap th {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  padding: 4px 2px;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.heatmap__team-col {
+  width: 152px;
+}
+
+.heatmap__team-head,
+.heatmap__team {
+  text-align: left !important;
+  position: sticky;
+  left: 0;
+  padding-left: 4px !important;
+  background: var(--surface);
+  z-index: 1;
+}
+
+.heatmap__team-btn {
+  width: 100%;
+  font-size: 11px;
+  font-weight: 650;
+  color: var(--text-primary);
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: left;
+  padding: 2px 0;
+}
+
+.heatmap td {
+  padding: 6px 2px;
+  text-align: center;
+  font-size: 10px;
+  border-radius: 4px;
+  min-width: 0;
+  background: var(--surface-sunken);
+  color: var(--text-secondary);
+}
+
+/* Nine positions (QB, SF and the rest) plus Total fit without a desktop
+   scrollbar. On a phone the cells retain a readable minimum and the existing
+   touch scroller takes over. */
+@media (max-width: 600px) {
+  .heatmap {
+    table-layout: auto;
+    min-width: 660px;
+  }
+
+  .heatmap td {
+    min-width: 44px;
+  }
+}
+
+/* A matrix cannot stay readable inside the very narrow cards produced by a
+   phone or split browser pane. Reflow each team into a labelled value grid at
+   the card breakpoint; wider cards retain the cross-team comparison table. */
+@container player-list (max-width: 360px) {
+  .heatmap__title {
+    flex-basis: 100%;
+  }
+
+  .heatmap-scroll {
+    overflow-x: visible;
+  }
+
+  .heatmap {
+    width: 100%;
+    min-width: 0;
+    table-layout: fixed;
+    border-spacing: 0;
+    padding: 0 8px 4px;
+  }
+
+  .heatmap colgroup {
+    display: none;
+  }
+
+  .heatmap thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+
+  .heatmap tbody {
+    display: block;
+  }
+
+  .heatmap tbody tr {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(38px, 1fr));
+    gap: 4px;
+    padding: 7px 0;
+    border-top: 1px solid var(--grid);
+  }
+
+  .heatmap tbody tr:first-child {
+    border-top: 0;
+  }
+
+  .heatmap__team {
+    position: static;
+    grid-column: 1 / -1;
+    padding: 0 4px 2px !important;
+    background: transparent;
+  }
+
+  .heatmap__team-btn {
+    max-width: none;
+    overflow: visible;
+    text-overflow: clip;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    line-height: 1.25;
+  }
+
+  .heatmap td {
+    display: flex;
+    min-width: 0;
+    min-height: 32px;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 1px;
+    padding: 3px 2px;
+    line-height: 1.15;
+  }
+
+  .heatmap td::before {
+    content: attr(data-label);
+    opacity: 0.78;
+    font-family: var(--font);
+    font-size: 7px;
+    font-weight: 800;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+}
+
+.heatmap tr.is-selected .heatmap__team-btn {
+  color: var(--accent);
+  font-weight: 800;
+}
+
+.heatmap__legend {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px 12px;
+}
+
+.heatmap__ramp {
+  display: flex;
+  flex: 1;
+  max-width: 220px;
+  height: 8px;
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.heatmap__ramp i {
+  flex: 1;
+}
+
+/* -------------------------------------------------------------- misc --- */
+
+/* ------------------------------------------------------------ schedule --- */
+
+.game-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1px;
+  background: var(--grid);
+}
+
+.group-head.schedule-game__head {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+}
+
+.schedule-game__teams {
+  grid-column: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.schedule-game__kickoff {
+  grid-column: 3;
+  justify-self: end;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+@media (max-width: 560px) {
+  .group-head.schedule-game__head {
+    grid-template-columns: 1fr;
+    justify-items: center;
+  }
+
+  .schedule-game__teams,
+  .schedule-game__kickoff {
+    grid-column: 1;
+    justify-self: center;
+  }
+}
+
+@media (max-width: 560px) {
+  .game-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.game-side {
+  background: var(--surface);
+  padding-bottom: 6px;
+  min-width: 0;
+}
+
+.game-player {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 5px 12px;
+  text-align: left;
+}
+
+.game-player:hover {
+  background: var(--surface-sunken);
+}
+
+.game-player__name {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  line-height: 1.25;
+}
+
+.game-player__name > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.page-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+}
+
+.page-title {
+  font-size: 22px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+
+/* Page heading gets a short accent rule above it — a quiet bit of colour that
+   marks where a page starts without competing with the data below. */
+.page-head::before {
+  content: '';
+  display: block;
+  width: 38px;
+  height: 3px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--accent), var(--accent-deep));
+  margin-bottom: 9px;
+  flex-basis: 100%;
+}
+
+.filters {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+  margin-bottom: 14px;
+}
+
+.grid-2 {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(min(320px, 100%), 1fr));
+}
+
+/*
+ * Roster beside its heatmap.
+ *
+ * Single column by default. It only splits once the page is wide enough to
+ * leave the roster ~560px, because a player row needs that much to fit the name
+ * plus the Value and positional ranks — below it the name starts truncating, which is
+ * exactly the failure this threshold exists to prevent.
+ */
+.split-roster {
+  display: grid;
+  gap: 12px;
+  align-items: start;
+}
+
+@media (min-width: 1160px) {
+  .split-roster {
+    grid-template-columns: minmax(540px, 1.2fr) minmax(500px, 1fr);
+  }
+
+  /* The heatmap column tracks the page as you scroll the roster. */
+  .split-roster__aside {
+    position: sticky;
+    top: 108px;
+  }
+}
+
+/* Grid and flex children default to min-width:auto, which lets a wide table
+   push the whole page sideways. Every layout container here opts out. */
+.grid-2 > *,
+.grid-cards > *,
+.stack > *,
+.filters > * {
+  min-width: 0;
+}
+
+.grid-cards {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+}
+
+/*
+ * Section header inside a card.
+ *
+ * Deliberately NOT sticky. It used to stick at `top: var(--nav-height)`, but the
+ * app header is taller than that token and its height varies with wrapping, so a
+ * stuck group header sat on top of the first row of its own group — the QB row
+ * was permanently half-hidden. A static header costs nothing here because the
+ * groups are short.
+ */
+.group-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 9px 12px;
+  background: linear-gradient(
+    to right,
+    var(--accent-wash),
+    color-mix(in srgb, var(--surface-sunken) 70%, transparent)
+  );
+  border-bottom: 1px solid var(--border);
+  border-left: 3px solid var(--accent);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+
+/* The card's own title bar sits above its groups and reads slightly stronger. */
+.group-head--primary {
+  font-size: 12px;
+  color: var(--text-primary);
+  padding: 11px 12px;
+}
+
+/* --------------------------------------------------------- analytics --- */
+
+.team-name {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  font-weight: 750;
+  text-align: left;
+}
+
+.team-name__dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex: 0 0 auto;
+}
+
+.power-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.power-controls {
+  padding-bottom: 0;
+}
+
+.power-controls .segmented {
+  max-width: 100%;
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+
+.power-controls .segmented button {
+  flex: 0 0 auto;
+}
+
+.power-row {
+  display: grid;
+  grid-template-columns: 24px minmax(112px, 0.45fr) minmax(120px, 1fr) 48px;
+  align-items: center;
+  gap: 10px 10px;
+}
+
+.power-rank,
+.power-value {
+  font-variant-numeric: tabular-nums;
+}
+
+.power-rank {
+  color: var(--text-muted);
+}
+
+.power-team {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.power-track {
+  height: 12px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--surface-sunken);
+  border: 1px solid var(--border);
+}
+
+.power-fill {
+  display: block;
+  height: 100%;
+  min-width: 2px;
+  border-radius: inherit;
+}
+
+.power-value {
+  text-align: right;
+  font-size: 12px;
+}
+
+.rank-chart__legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+  margin-bottom: 8px;
+}
+
+.rank-chart__legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.rank-chart__legend-dot {
+  width: 8px;
+  height: 8px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+}
+
+@media (max-width: 560px) {
+  .power-row {
+    grid-template-columns: 22px minmax(0, 1fr) 48px;
+    gap: 8px;
+  }
+
+  .power-track {
+    grid-column: 2 / -1;
+    height: 10px;
+  }
+
+  .rank-chart__legend {
+    gap: 7px 10px;
+  }
+}
+
+/* ------------------------------------------------ win probability & odds --- */
+
+/*
+ * A two-sided bar: the two fills abut in the middle, so the boundary itself is
+ * the reading. Both percentages are printed alongside, since the fills carry
+ * team colours that a reader may not be able to distinguish.
+ */
+.winprob {
+  display: flex;
+  height: 10px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: var(--surface-sunken);
+  border: 1px solid var(--border);
+}
+
+.winprob__fill {
+  display: block;
+  height: 100%;
+  transition: width 0.3s ease;
+}
+
+.winprob__fill--away {
+  opacity: 0.55;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .winprob__fill {
+    transition: none;
+  }
+}
+
+.matchup-card {
+  overflow: hidden;
+}
+
+.matchup-card__scoreboard {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  gap: 8px 14px;
+  padding: 16px;
+  background: linear-gradient(
+    110deg,
+    color-mix(in srgb, var(--accent) 7%, transparent),
+    transparent 55%
+  );
+}
+
+.matchup-card__team {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.matchup-card__team.is-away {
+  text-align: right;
+  align-items: flex-end;
+}
+
+.matchup-card__team .team-name {
+  max-width: 100%;
+}
+
+.matchup-card__team.is-away .team-name {
+  text-align: right;
+}
+
+.matchup-card__win {
+  font-size: 22px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+.matchup-card__probability {
+  grid-column: 1 / -1;
+}
+
+.matchup-card__stats th:first-child {
+  width: 28%;
+}
+
+.matchup-card__stats tbody th {
+  color: var(--text-secondary);
+}
+
+.matchup-card__lineups {
+  border-top: 1px solid var(--border-strong);
+}
+
+.matchup-card__lineups > summary {
+  padding: 11px 14px;
+  cursor: pointer;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 750;
+  list-style-position: inside;
+}
+
+.matchup-card__lineups[open] > summary {
+  border-bottom: 1px solid var(--border);
+  color: var(--text-primary);
+}
+
+.matchup-card__lineup-note {
+  padding: 10px 14px 0;
+}
+
+.matchup-lineups {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  padding: 12px;
+}
+
+.matchup-lineup {
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+
+.matchup-lineup__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 10px;
+  background: var(--surface-sunken);
+  border-bottom: 1px solid var(--border);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.matchup-lineup__player {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--grid);
+  text-align: left;
+}
+
+.matchup-lineup__player:last-child {
+  border-bottom: 0;
+}
+
+.matchup-lineup__player:hover {
+  background: var(--surface-sunken);
+}
+
+.matchup-lineup__identity {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+}
+
+.matchup-lineup__identity > span:last-child {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.matchup-lineup__identity .bold {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.matchup-lineup__slot {
+  min-width: 38px;
+  justify-content: center;
+}
+
+.matchup-lineup__opponent {
+  display: block;
+}
+
+.matchup-lineup__numbers {
+  flex: 0 0 auto;
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  max-width: 55%;
+  font-size: 10px;
+}
+
+.matchup-method {
+  padding: 2px 4px 8px;
+}
+
+@media (max-width: 760px) {
+  .matchup-lineups {
+    grid-template-columns: 1fr;
+  }
+
+  .matchup-lineup__player {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .matchup-lineup__numbers {
+    max-width: none;
+    padding-left: 46px;
+    justify-content: flex-start;
+  }
+}
+
+@media (max-width: 480px) {
+  .matchup-card__scoreboard {
+    gap: 8px;
+    padding: 12px;
+  }
+
+  .matchup-card__team .team-name {
+    font-size: 12px;
+  }
+
+  .matchup-card__team .tiny {
+    font-size: 10px;
+  }
+
+  .matchup-card__win {
+    font-size: 19px;
+  }
+}
+
+.odds-cell {
+  font-variant-numeric: tabular-nums;
+}
+
+/* A quiet in-cell bar behind the number, so a column of odds reads as a shape. */
+.odds-cell__track {
+  display: block;
+  height: 3px;
+  margin-top: 3px;
+  border-radius: 999px;
+  background: var(--surface-sunken);
+}
+
+.odds-cell__fill {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: var(--accent);
+}
+
+/*
+ * A chip whose underlying rating has no demonstrated predictive power for that
+ * position. Dimmed rather than hidden: the number is still real and still ranks
+ * defences correctly, it just should not carry the same visual weight as one
+ * that predicts something.
+ */
+.chip--weak {
+  opacity: 0.45;
+}

@@ -1,0 +1,155 @@
+/**
+ * Design tokens.
+ *
+ * Light and dark are both deliberately chosen — dark is not a filter applied to
+ * light. Data colours come from the validated palette (see src/lib/colors.ts);
+ * everything here is chrome, surface and ink.
+ */
+
+:root {
+  color-scheme: light;
+
+  /* Surfaces, from furthest back to nearest front */
+  --page: #f9f9f7;
+  --surface: #fcfcfb;
+  --surface-raised: #ffffff;
+  --surface-sunken: #f2f1ee;
+
+  /* Ink */
+  --text-primary: #0b0b0b;
+  --text-secondary: #52514e;
+  --text-muted: #898781;
+
+  /* Lines */
+  --border: rgba(11, 11, 11, 0.1);
+  --border-strong: #c3c2b7;
+  --grid: #e1e0d9;
+
+  /* Brand accent — also categorical slot 1 */
+  --accent: #2a78d6;
+  --accent-deep: #1c5cab;
+  --accent-ink: #ffffff;
+  --accent-wash: rgba(42, 120, 214, 0.1);
+
+  /* Boom/bust status tones (reserved palette, never used for series) */
+  --tone-major-boom: #0ca30c;
+  --tone-boom: #0ca30c;
+  --tone-mid: #898781;
+  --tone-bust: #ec835a;
+  --tone-major-bust: #d03b3b;
+  --tone-idle: #898781;
+
+  /* Chart series */
+  --series-1: #2a78d6; /* projected */
+  --series-2: #eb6834; /* actual */
+  --series-3: #1baf7a;
+
+  --success-text: #006300;
+  --danger-text: #b3261e;
+  /*
+   * The three positional rank chips. Teal, magenta, olive: three hues far
+   * enough apart to be told apart at 11px without reading the label, and none
+   * of them the red or green the boom/bust tones own — a rank is a standing,
+   * not a verdict, and colouring PPG green would read as "good week".
+   */
+  --rank-total: #006f68;
+  --rank-ppg: #b4188f;
+  --rank-boom: #4d7c0f;
+
+  /* Shape & motion */
+  --radius-sm: 6px;
+  --radius: 10px;
+  --radius-lg: 16px;
+  --shadow-sm: 0 1px 2px rgba(11, 11, 11, 0.06);
+  --shadow: 0 2px 8px rgba(11, 11, 11, 0.08);
+  --shadow-lg: 0 12px 32px rgba(11, 11, 11, 0.16);
+
+  --font: system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-mono: ui-monospace, 'SF Mono', 'Cascadia Mono', Menlo, monospace;
+
+  /* Layout */
+  --nav-height: 56px;
+  --max-width: 1400px;
+}
+
+/* Dark mode: OS preference, unless the user has explicitly chosen light. */
+@media (prefers-color-scheme: dark) {
+  :root:where(:not([data-theme='light'])) {
+    color-scheme: dark;
+
+    --page: #0d0d0d;
+    --surface: #1a1a19;
+    --surface-raised: #232322;
+    --surface-sunken: #131312;
+
+    --text-primary: #ffffff;
+    --text-secondary: #c3c2b7;
+    --text-muted: #898781;
+
+    --border: rgba(255, 255, 255, 0.1);
+    --border-strong: #383835;
+    --grid: #2c2c2a;
+
+    --accent: #3987e5;
+    --accent-deep: #2a6fc4;
+    --accent-ink: #ffffff;
+    --accent-wash: rgba(57, 135, 229, 0.16);
+
+    --tone-bust: #ec835a;
+    --tone-major-bust: #d03b3b;
+
+    --series-1: #3987e5;
+    --series-2: #d95926;
+    --series-3: #199e70;
+
+    --success-text: #0ca30c;
+    --danger-text: #e66767;
+    --rank-total: #5eead4;
+    --rank-ppg: #f0abfc;
+    --rank-boom: #a3e635;
+
+    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+    --shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+    --shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.6);
+  }
+}
+
+/* Explicit dark toggle wins over the OS setting in both directions. */
+:root[data-theme='dark'] {
+  color-scheme: dark;
+
+  --page: #0d0d0d;
+  --surface: #1a1a19;
+  --surface-raised: #232322;
+  --surface-sunken: #131312;
+
+  --text-primary: #ffffff;
+  --text-secondary: #c3c2b7;
+  --text-muted: #898781;
+
+  --border: rgba(255, 255, 255, 0.1);
+  --border-strong: #383835;
+  --grid: #2c2c2a;
+
+  --accent: #3987e5;
+  --accent-deep: #2a6fc4;
+  --accent-ink: #ffffff;
+  --accent-wash: rgba(57, 135, 229, 0.16);
+
+  --tone-bust: #ec835a;
+  --tone-major-bust: #d03b3b;
+
+  --series-1: #3987e5;
+  --series-2: #d95926;
+  --series-3: #199e70;
+
+  --success-text: #0ca30c;
+  --danger-text: #e66767;
+  --rank-total: #5eead4;
+  --rank-ppg: #f0abfc;
+  --rank-boom: #a3e635;
+
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+  --shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.6);
+}

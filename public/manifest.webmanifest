@@ -1,0 +1,39 @@
+{
+  "id": "./",
+  "name": "UK-BG — League Analytics",
+  "short_name": "UK-BG",
+  "description": "Custom-scored analytics for the UK-BG ESPN fantasy league.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#0d0d0d",
+  "theme_color": "#1a1a19",
+  "categories": ["sports", "utilities"],
+  "icons": [
+    {
+      "src": "./favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "./icon-maskable.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Optimal Lineup",
+      "short_name": "Optimal",
+      "url": "./#/optimal"
+    },
+    {
+      "name": "Analytics",
+      "short_name": "Stats",
+      "url": "./#/analytics"
+    }
+  ]
+}
