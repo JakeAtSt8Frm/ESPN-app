@@ -137,8 +137,11 @@
 
 import type { PriorPair } from './forecast';
 import { computeOptimalLineup, starterSlots, type LineupCandidate } from './optimal';
+import { startingDepthByGroup as startingSlotsByGroup } from './replacement';
 import { round, stdev } from './stats';
 import { POSITION_GROUPS, type Player, type PositionGroup } from './types';
+
+export { startingDepthByGroup as startingSlotsByGroup } from './replacement';
 
 /** Standard normal density. */
 function phi(z: number): number {
@@ -176,17 +179,6 @@ export function expectedExcess(mean: number, sd: number, strike: number): number
   const z = edge / sd;
   return edge * Phi(z) + sd * phi(z);
 }
-
-/**
- * How a FLEX slot divides across the groups eligible for it.
- *
- * Mirrors `season-value.ts` deliberately: the two replacement levels should not
- * disagree about where the startable cliff is just because they were written in
- * different files.
- */
-const FLEX_SPLIT: Record<string, Partial<Record<PositionGroup, number>>> = {
-  FLEX: { RB: 0.4, WR: 0.45, TE: 0.15 },
-};
 
 const SLOT_TO_GROUP: Record<string, PositionGroup> = {
   QB: 'QB',
@@ -335,33 +327,6 @@ export function measureDrift(
   return out;
 }
 
-/** How many of each group the whole league starts in a week. */
-export function startingSlotsByGroup(
-  rosterSlots: string[],
-  numTeams: number,
-): Map<PositionGroup, number> {
-  const perTeam = new Map<PositionGroup, number>();
-  const add = (group: PositionGroup, n: number) =>
-    perTeam.set(group, (perTeam.get(group) ?? 0) + n);
-
-  for (const raw of rosterSlots) {
-    const slot = String(raw).toUpperCase();
-    if (slot === 'BN' || slot === 'IR') continue;
-    const direct = SLOT_TO_GROUP[slot];
-    if (direct) {
-      add(direct, 1);
-      continue;
-    }
-    for (const [group, share] of Object.entries(FLEX_SPLIT[slot] ?? {})) {
-      add(group as PositionGroup, share ?? 0);
-    }
-  }
-
-  const out = new Map<PositionGroup, number>();
-  for (const [group, n] of perTeam) out.set(group, n * numTeams);
-  return out;
-}
-
 export interface TradeValue {
   pid: string;
   group: PositionGroup;
@@ -387,6 +352,8 @@ export interface TradeValue {
 
 export interface TradeValueIndex {
   byPlayer: Map<string, TradeValue>;
+  /** Projected league-wide starters by position, including allocated FLEX seats. */
+  startingDepthByGroup: Map<PositionGroup, number>;
   /** Startable-cliff replacement, per week, by position. */
   replacementPerWeek: Map<PositionGroup, number>;
   /** Best freely available player's per-week points, by position. */
@@ -483,38 +450,7 @@ export function buildTradeValues(input: BuildTradeValuesInput): TradeValueIndex 
     priorPairs,
   } = input;
 
-  const slots = startingSlotsByGroup(rosterSlots, numTeams);
   const driftByGroup = input.driftByGroup ?? measureDrift(priorPairs);
-
-  /*
-   * How much of a start decision each position actually offers, measured off
-   * the real rosters: bodies held per team beyond the slots the league starts.
-   * Kicker and defence land near zero because nobody carries a second one, and
-   * a position you start unconditionally has no option to price.
-   */
-  const rosteredByGroup = new Map<PositionGroup, number>();
-  for (const pid of rosteredIds) {
-    const group = playersById.get(pid)?.group;
-    if (group) rosteredByGroup.set(group, (rosteredByGroup.get(group) ?? 0) + 1);
-  }
-
-  const optionWeightByGroup = new Map<PositionGroup, number>();
-  for (const group of POSITION_GROUPS) {
-    const surplus = (rosteredByGroup.get(group) ?? 0) - (slots.get(group) ?? 0);
-    optionWeightByGroup.set(group, Math.max(0, Math.min(1, surplus / Math.max(1, numTeams))));
-  }
-
-  /**
-   * Spread of the start decision at this position.
-   *
-   * Both the player and the alternative drift between now and the week in
-   * question, and the decision compares the two, so their independent drifts
-   * combine as `√2 × drift`. Scaled by how much of a decision there is at all.
-   */
-  const decisionSpread = (group: PositionGroup): number =>
-    (optionWeightByGroup.get(group) ?? 0) *
-    (driftByGroup.get(group)?.drift ?? 0) *
-    Math.SQRT2;
 
   interface Row {
     pid: string;
@@ -553,6 +489,43 @@ export function buildTradeValues(input: BuildTradeValuesInput): TradeValueIndex 
       availability: availabilityFor(player),
     });
   }
+
+  const slots = startingSlotsByGroup(
+    rosterSlots,
+    numTeams,
+    rows.filter((row) => row.weeksProjected > 0)
+      .map((row) => ({ group: row.group, points: row.pointsPerWeek })),
+  );
+
+  /*
+   * How much of a start decision each position actually offers, measured off
+   * the real rosters: bodies held per team beyond the slots the league starts.
+   * Kicker and defence land near zero because nobody carries a second one, and
+   * a position you start unconditionally has no option to price.
+   */
+  const rosteredByGroup = new Map<PositionGroup, number>();
+  for (const pid of rosteredIds) {
+    const group = playersById.get(pid)?.group;
+    if (group) rosteredByGroup.set(group, (rosteredByGroup.get(group) ?? 0) + 1);
+  }
+
+  const optionWeightByGroup = new Map<PositionGroup, number>();
+  for (const group of POSITION_GROUPS) {
+    const surplus = (rosteredByGroup.get(group) ?? 0) - (slots.get(group) ?? 0);
+    optionWeightByGroup.set(group, Math.max(0, Math.min(1, surplus / Math.max(1, numTeams))));
+  }
+
+  /**
+   * Spread of the start decision at this position.
+   *
+   * Both the player and the alternative drift between now and the week in
+   * question, and the decision compares the two, so their independent drifts
+   * combine as `√2 × drift`. Scaled by how much of a decision there is at all.
+   */
+  const decisionSpread = (group: PositionGroup): number =>
+    (optionWeightByGroup.get(group) ?? 0) *
+    (driftByGroup.get(group)?.drift ?? 0) *
+    Math.SQRT2;
 
   // ---- Two baselines per position -----------------------------------------
   const byGroup = new Map<PositionGroup, Row[]>();
@@ -636,6 +609,7 @@ export function buildTradeValues(input: BuildTradeValuesInput): TradeValueIndex 
 
   return {
     byPlayer,
+    startingDepthByGroup: slots,
     replacementPerWeek,
     waiverPerWeek,
     driftByGroup,

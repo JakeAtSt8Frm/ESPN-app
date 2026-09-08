@@ -7,11 +7,14 @@
  */
 
 import { useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { useLeague, useLeagueData } from '../data/LeagueProvider';
 import {
+  actualOptimalLineup,
   projectedLineupTotal,
   projectedOptimalLineup,
   weekForecasts,
+  weekIsComplete,
   type ProjectionSource,
 } from '../data/predictions';
 import { buildHeatmap, buildRosterWeek } from '../data/selectors';
@@ -28,12 +31,20 @@ import { playerHeadshot, teamLogo } from '../lib/assets';
 import { fmtSlot } from '../lib/labels';
 import { playerName } from '../data/league';
 import { lineupEfficiency } from '../lib/optimal';
+import { hasPlayed } from '../lib/scoring';
 
 export function OptimalPage() {
   const data = useLeagueData();
   const { week, selectedTeamId, setSelectedTeamId } = useLeague();
   const [openPid, setOpenPid] = useState<string | null>(null);
   const [projectionSource, setProjectionSource] = useState<ProjectionSource>('app');
+  const [viewChoice, setViewChoice] = useState<{ week: number; results: boolean } | null>(null);
+  const complete = weekIsComplete(data, week);
+  const hasResults = Object.values(data.weeks.get(week)?.stats ?? {}).some(hasPlayed);
+  // A Thursday result must not zero out the rest of a Sunday's forecast.
+  // Use one view for the entire league so the comparison table never mixes
+  // actual totals for some teams with projected totals for others.
+  const showResults = hasResults && (viewChoice?.week === week ? viewChoice.results : complete);
 
   const teamId = selectedTeamId ?? data.teams[0]?.teamId ?? null;
 
@@ -46,13 +57,14 @@ export function OptimalPage() {
 
   const selectedView = useMemo(() => {
     if (!rosterWeek) return null;
-    const played = rosterWeek.all.some((player) => player.hasPlayed);
+    const played = showResults;
     if (played) {
+      const optimalLineup = actualOptimalLineup(data.starterSlots, rosterWeek.all);
       return {
         played,
         fielded: rosterWeek.actualTotal,
-        optimalLineup: rosterWeek.optimalLineup,
-        efficiency: rosterWeek.efficiency,
+        optimalLineup,
+        efficiency: lineupEfficiency(rosterWeek.actualTotal, optimalLineup.total),
       };
     }
 
@@ -73,7 +85,7 @@ export function OptimalPage() {
       optimalLineup,
       efficiency: lineupEfficiency(fielded, optimalLineup.total),
     };
-  }, [data.starterSlots, forecasts, projectionSource, rosterWeek]);
+  }, [data.starterSlots, forecasts, projectionSource, rosterWeek, showResults]);
 
   /** Optimal-lineup efficiency for every team this week, for the comparison table. */
   const leagueEfficiency = useMemo(
@@ -84,14 +96,15 @@ export function OptimalPage() {
           if (!rw) {
             return { teamId: team.teamId, name: team.name, actual: 0, optimal: 0, efficiency: 0 };
           }
-          const played = rw.all.some((player) => player.hasPlayed);
+          const played = showResults;
           if (played) {
+            const optimal = actualOptimalLineup(data.starterSlots, rw.all).total;
             return {
               teamId: team.teamId,
               name: team.name,
               actual: rw.actualTotal,
-              optimal: rw.optimalTotal,
-              efficiency: rw.efficiency,
+              optimal,
+              efficiency: lineupEfficiency(rw.actualTotal, optimal),
             };
           }
 
@@ -111,7 +124,7 @@ export function OptimalPage() {
           };
         })
         .sort((a, b) => b.efficiency - a.efficiency),
-    [data, forecasts, projectionSource, week],
+    [data, forecasts, projectionSource, showResults, week],
   );
 
   const heatmapRows = useMemo(
@@ -134,10 +147,24 @@ export function OptimalPage() {
   return (
     <>
       <div className="page-head">
-        <h1 className="page-title">Optimal Lineup</h1>
+        <div>
+          <h1 className="page-title">Optimal Lineup</h1>
+          <p className="small secondary">
+            {hasResults && !complete
+              ? 'Week in progress · forecasts compare pregame lineups; results show points recorded so far.'
+              : played ? 'Completed week · reviewing recorded results.' : 'Pregame lineup comparison · based on the saved roster.'}
+          </p>
+        </div>
+        <Link className="btn btn-sm" to="/predictions">Compare start / sit odds →</Link>
       </div>
 
       <div className="filters">
+        {hasResults && (
+          <div className="segmented" role="group" aria-label="Lineup view">
+            <button aria-pressed={!played} onClick={() => setViewChoice({ week, results: false })}>Forecast</button>
+            <button aria-pressed={played} onClick={() => setViewChoice({ week, results: true })}>{complete ? 'Results' : 'Results so far'}</button>
+          </div>
+        )}
         <div className="segmented" role="group" aria-label="Select team">
           {data.teams.map((t) => (
             <button

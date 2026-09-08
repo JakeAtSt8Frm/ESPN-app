@@ -8,11 +8,13 @@
  */
 
 import { useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { useLeague, useLeagueData } from '../data/LeagueProvider';
 import { buildHeatmap, buildRankHeatmap, buildRosterWeek } from '../data/selectors';
 import {
   appProjectionFor,
   projectedLineupTotal,
+  projectedOptimalLineup,
   weekForecasts,
 } from '../data/predictions';
 import { PlayerRow } from '../components/PlayerRow';
@@ -27,8 +29,11 @@ import {
   fmtPct,
 } from '../components/primitives';
 import { fmtSlot } from '../lib/labels';
+import { lineupAlerts } from '../lib/lineup-alerts';
+import { lineupEfficiency } from '../lib/optimal';
 import type { EnrichedPlayer } from '../lib/types';
 import type { HeatmapMetric, HeatmapScope } from '../data/selectors';
+import './Teams.css';
 
 /**
  * Display labels for starter slots, and which slots share a heading.
@@ -102,6 +107,32 @@ export function TeamsPage() {
     [forecasts, rosterWeek],
   );
 
+  const lineupView = useMemo(() => {
+    if (!rosterWeek) return null;
+    const played = rosterWeek.all.some((player) => player.hasPlayed);
+    const optimalTotal = played
+      ? rosterWeek.optimalTotal
+      : projectedOptimalLineup(data.starterSlots, rosterWeek.all, forecasts, 'app').total;
+    const fielded = played ? rosterWeek.actualTotal : appProjectedTotal;
+    return {
+      played,
+      optimalTotal,
+      efficiency: lineupEfficiency(fielded, optimalTotal),
+      upside: Math.max(0, optimalTotal - fielded),
+    };
+  }, [appProjectedTotal, data.starterSlots, forecasts, rosterWeek]);
+
+  const alerts = useMemo(
+    () => rosterWeek ? lineupAlerts({
+      starterSlots: data.starterSlots,
+      starters: rosterWeek.starters,
+      hasRoster: rosterWeek.all.length > 0,
+      week,
+      liveWeek: data.liveWeek,
+    }) : [],
+    [data.liveWeek, data.starterSlots, rosterWeek, week],
+  );
+
   const heatmapRows = useMemo(
     () => buildHeatmap(data, week, scope, metric),
     [data, week, scope, metric],
@@ -150,12 +181,15 @@ export function TeamsPage() {
     return groups.filter((g) => g.players.length > 0);
   }, [rosterWeek, data.starterSlots]);
 
-  if (!rosterWeek) {
+  if (!rosterWeek || !lineupView) {
     return <EmptyState title="No team selected" />;
   }
 
-  const { team, starters, bench, injured, projectedTotal, actualTotal, optimalTotal, efficiency } =
+  const { team, starters, bench, injured, projectedTotal, actualTotal } =
     rosterWeek;
+  const { played, optimalTotal, efficiency, upside } = lineupView;
+  const hasRoster = rosterWeek.all.length > 0;
+  const emptySlots = alerts.reduce((sum, alert) => sum + (alert.kind === 'empty' ? alert.count : 0), 0);
 
   return (
     <>
@@ -181,26 +215,80 @@ export function TeamsPage() {
         </div>
       </div>
 
+      <section className="card card-pad lineup-brief" aria-labelledby="lineup-brief-title">
+        <div className="lineup-brief__head">
+          <div>
+            <h2 id="lineup-brief-title" className="lineup-brief__title">Week {week} lineup {week < data.liveWeek ? 'review' : 'check'}</h2>
+            <p className="small muted">
+              {hasRoster
+                ? `${data.starterSlots.length - emptySlots} of ${data.starterSlots.length} starting slots filled${alerts.length === 0 ? ' · No starter flags' : ''}`
+                : 'Lineup checks will appear when this team has a roster.'}
+            </p>
+          </div>
+          <div className="lineup-brief__actions">
+            <Link className="btn btn-sm" to="/optimal">Review optimal lineup <span aria-hidden="true">→</span></Link>
+            <Link className="btn btn-sm btn-ghost" to="/players">Browse players</Link>
+            <Link className="btn btn-sm btn-ghost" to="/predictions">Prediction Lab</Link>
+          </div>
+        </div>
+        {alerts.length > 0 && (
+          <ul className="lineup-brief__alerts" aria-label="Starter flags">
+            {alerts.map((alert) => (
+              <li key={alert.kind === 'empty' ? `empty:${alert.slot}` : alert.pid}>
+                {alert.kind === 'empty' ? (
+                  <span className="lineup-brief__alert">
+                    <span className="lineup-brief__reason">{alert.count} empty {fmtSlot(alert.slot)} {alert.count === 1 ? 'slot' : 'slots'}</span>
+                  </span>
+                ) : (
+                  <button className="lineup-brief__alert" onClick={() => setOpenPid(alert.pid)}>
+                    <span className={`lineup-brief__reason${alert.reason === 'Questionable' || alert.reason === 'Doubtful' ? ' lineup-brief__reason--watch' : ''}`}>{alert.reason}</span>
+                    <span>{alert.name}</span>
+                    <span className="muted">· {fmtSlot(alert.slot)}</span>
+                  </button>
+                )}
+              </li>
+            ))}
+          </ul>
+        )}
+        {hasRoster && (
+          <p className="tiny muted lineup-brief__note">
+            {week < data.liveWeek
+              ? `${rosterWeek.lineupIsCurrent ? 'No saved lineup for this week; showing the current roster.' : 'Saved weekly lineup.'} Current injury labels are excluded.`
+              : 'Based on the saved roster and injury report. Confirm the latest player status in ESPN.'}
+          </p>
+        )}
+      </section>
+
       <StatTileRow>
-        <StatTile label="Actual Score" value={fmt1(actualTotal)} />
         <StatTile
-          label="App Projection"
-          value={fmt1(appProjectedTotal)}
-          sub="historical bias + matchup adjusted"
+          label={played ? 'Actual Score' : 'Current Lineup'}
+          value={fmt1(hasRoster ? (played ? actualTotal : appProjectedTotal) : null)}
+          sub={played ? 'results in snapshot' : 'app expected points'}
         />
-        <StatTile label="ESPN Projection" value={fmt1(projectedTotal)} />
-        <StatTile label="Optimal" value={fmt1(optimalTotal)} />
         <StatTile
-          label="Efficiency"
-          value={fmtPct(efficiency, 1)}
-          tone={
-            efficiency >= 0.95
-              ? 'var(--success-text)'
-              : efficiency < 0.8
-                ? 'var(--danger-text)'
-                : undefined
-          }
+          label={played ? 'App Projection' : 'Best Available'}
+          value={fmt1(hasRoster ? (played ? appProjectedTotal : optimalTotal) : null)}
+          sub={!played && hasRoster && optimalTotal > 0 ? `${fmtPct(efficiency, 1)} lineup efficiency` : 'app expected points'}
         />
+        <StatTile label="ESPN Projection" value={fmt1(hasRoster ? projectedTotal : null)} />
+        <StatTile
+          label={played ? 'Optimal Actual' : 'Lineup Upside'}
+          value={fmt1(hasRoster ? (played ? optimalTotal : upside) : null)}
+          sub={played ? 'best roster result' : 'additional expected points'}
+        />
+        {played && (
+          <StatTile
+            label="Efficiency"
+            value={fmtPct(hasRoster && optimalTotal > 0 ? efficiency : null, 1)}
+            tone={
+              !hasRoster || optimalTotal <= 0 ? undefined : efficiency >= 0.95
+                ? 'var(--success-text)'
+                : efficiency < 0.8
+                  ? 'var(--danger-text)'
+                  : undefined
+            }
+          />
+        )}
       </StatTileRow>
 
       <div style={{ height: 16 }} />
@@ -227,7 +315,7 @@ export function TeamsPage() {
                 empty card reads as a failure rather than as the truth. ESPN
                 serves a projected auto-draft lineup for these teams, which
                 `snapshot.ts` deliberately refuses — see the lineup block there. */}
-            {starters.length === 0 && bench.length === 0 && (
+            {!hasRoster && (
               <div className="card-pad small muted" style={{ textAlign: 'center' }}>
                 No roster yet — {data.league.name} has not drafted.
               </div>

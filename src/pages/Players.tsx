@@ -2,22 +2,45 @@
  * Players — searchable browser over everyone, rostered or free.
  *
  * Defaults to free agents because that's the actionable list, but the whole
- * league is searchable. Ranking is by Value Score, which is computed within
- * position group, so the DB list is ranked against other DBs rather than
- * against quarterbacks.
+ * league is searchable. Value and production rankings help with longer-term
+ * choices; the selected week's projections help find a starter right now.
  */
 
-import { useDeferredValue, useMemo, useState } from 'react';
+import { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useLeague, useLeagueData } from '../data/LeagueProvider';
-import { appProjectionFor, weekForecasts } from '../data/predictions';
+import { appProjectionFor, projectedPlayerScore, weekForecasts } from '../data/predictions';
 import { enrichPlayer, rosterOwnerByPlayer } from '../data/selectors';
 import { PlayerRow } from '../components/PlayerRow';
 import { PlayerModal } from '../components/PlayerModal';
 import { EmptyState } from '../components/primitives';
+import { fmtLeagueFormat } from '../lib/labels';
 import { POSITION_GROUPS, type PositionGroup } from '../lib/types';
 
 type Availability = 'free' | 'rostered' | 'all';
-type SortKey = 'value' | 'ppg' | 'total' | 'last4' | 'boomRate';
+const SORT_KEYS = [
+  'value', 'waiverValue', 'positionValue', 'appProjection', 'espnProjection', 'ppg', 'total', 'last4', 'boomRate',
+] as const;
+type SortKey = (typeof SORT_KEYS)[number];
+const PAGE_SIZE = 50;
+
+interface PlayerFilters {
+  group: PositionGroup | 'ALL';
+  availability: Availability;
+  teamId: number | 'ALL';
+  sort: SortKey;
+  query: string;
+  shown: number;
+}
+
+const DEFAULT_FILTERS: PlayerFilters = {
+  group: 'ALL',
+  availability: 'free',
+  teamId: 'ALL',
+  sort: 'value',
+  query: '',
+  shown: PAGE_SIZE,
+};
 
 export function PlayersPage() {
   const data = useLeagueData();
@@ -25,12 +48,50 @@ export function PlayersPage() {
   // `currentWeek` here showed a projection column of zeroes before week one,
   // because `currentWeek` is the last *completed* week and there isn't one.
   const { week } = useLeague();
-  const [group, setGroup] = useState<PositionGroup | 'ALL'>('ALL');
-  const [availability, setAvailability] = useState<Availability>('free');
-  const [teamId, setTeamId] = useState<number | 'ALL'>('ALL');
-  const [sort, setSort] = useState<SortKey>('value');
-  const [query, setQuery] = useState('');
+  const [searchParams, setSearchParams] = useSearchParams();
   const [openPid, setOpenPid] = useState<string | null>(null);
+  const resultsRef = useRef<HTMLElement>(null);
+  const firstAddedRow = useRef<number | null>(null);
+
+  // The URL keeps a player's search intact when Back returns from another page.
+  // Only accept positions, teams and sorts that exist in the loaded league.
+  const group = POSITION_GROUPS.find((g) => g === searchParams.get('position')) ?? 'ALL';
+  const requestedTeam = Number(searchParams.get('team'));
+  const teamId = searchParams.has('team') && Number.isSafeInteger(requestedTeam) &&
+    data.teamsById.has(requestedTeam) ? requestedTeam : 'ALL';
+  const requestedAvailability = searchParams.get('availability');
+  const availability: Availability = teamId !== 'ALL' ? 'rostered'
+    : requestedAvailability === 'all' || requestedAvailability === 'rostered'
+      ? requestedAvailability : 'free';
+  const requestedSort = SORT_KEYS.find((key) => key === searchParams.get('sort')) ?? 'value';
+  const sort = requestedSort === 'last4' && data.ranks.fromPrior ? 'value' : requestedSort;
+  const query = (searchParams.get('q') ?? '').slice(0, 120);
+  const requestedShown = Number(searchParams.get('shown') ?? PAGE_SIZE);
+  const shown = Number.isSafeInteger(requestedShown) && requestedShown >= PAGE_SIZE
+    ? Math.min(requestedShown, Math.max(PAGE_SIZE, data.combinedScores.size)) : PAGE_SIZE;
+  const filters: PlayerFilters = { group, availability, teamId, sort, query, shown };
+
+  function updateFilters(updates: Partial<PlayerFilters>, replace = false) {
+    const next = { ...filters, shown: PAGE_SIZE, ...updates };
+    const params = new URLSearchParams(searchParams);
+    const values = {
+      position: next.group === 'ALL' ? null : next.group,
+      availability: next.availability === 'free' ? null : next.availability,
+      team: next.teamId === 'ALL' ? null : String(next.teamId),
+      sort: next.sort === 'value' ? null : next.sort,
+      q: next.query || null,
+      shown: next.shown === PAGE_SIZE ? null : String(next.shown),
+    };
+    for (const [key, value] of Object.entries(values)) {
+      if (value === null) params.delete(key);
+      else params.set(key, value);
+    }
+    setSearchParams(params, { replace, preventScrollReset: true });
+  }
+
+  const resetFilters = () => updateFilters(DEFAULT_FILTERS);
+  const hasFilters = group !== 'ALL' || availability !== 'free' || teamId !== 'ALL' ||
+    sort !== 'value' || query !== '' || shown > PAGE_SIZE;
 
   // Keeps typing responsive while the list re-filters.
   const deferredQuery = useDeferredValue(query);
@@ -43,6 +104,7 @@ export function PlayersPage() {
     const rows: Array<{ pid: string; sortValue: number }> = [];
 
     for (const [pid, combinedScore] of data.combinedScores) {
+      const player = data.playersById.get(pid);
       const value = data.valueIndex.byPlayer.get(pid) ?? null;
       const season = data.seasonValueIndex.byPlayer.get(pid) ?? null;
       const playerGroup = value?.group ?? season?.group ?? null;
@@ -55,10 +117,7 @@ export function PlayersPage() {
       if (teamId !== 'ALL' && owner?.teamId !== teamId) continue;
 
       if (needle) {
-        const player = data.playersById.get(pid);
-        const name = (
-          player?.name ?? ''
-        ).toLowerCase();
+        const name = (player?.name ?? '').toLowerCase();
         const team = (player?.team ?? '').toLowerCase();
         if (!name.includes(needle) && !team.includes(needle)) continue;
       }
@@ -67,9 +126,9 @@ export function PlayersPage() {
        * Sorting by value across positions has to use points, not the Value
        * Score — that one is a percentile inside a position group, so an "All
        * positions" list ordered by it is led by whoever is most dominant
-       * *relative to his own pool*, which is usually a kicker. Inside a single
-       * position the two agree on the ordering and the Value Score is the more
-       * informative number, so it keeps the column.
+       * *relative to his own pool*, which is usually a kicker. Keep the same
+       * points-based ordering when narrowing to a position; the position score
+       * is a separate sort with a different purpose.
        */
       /*
        * The three production sorts fall back to last season, on the same switch
@@ -78,12 +137,21 @@ export function PlayersPage() {
        * of zeroes — a button that visibly does nothing.
        */
       const prior = data.ranks.fromPrior ? data.priorProduction.get(pid) : undefined;
+      const projection = sort === 'appProjection' || sort === 'espnProjection'
+        ? projectedPlayerScore({
+          pid,
+          group: player?.group ?? null,
+          slot: '',
+          proj: data.score(data.weeks.get(week)?.projections[pid], player?.group ?? null),
+        }, forecasts, sort === 'appProjection' ? 'app' : 'espn')
+        : null;
 
       const sortValue =
-        sort === 'value'
-          ? group === 'ALL'
-            ? (data.tradeValues.byPlayer.get(pid)?.points ?? 0)
-            : combinedScore
+        projection !== null ? projection : sort === 'value'
+          ? (data.tradeValues.byPlayer.get(pid)?.points ?? 0)
+          : sort === 'waiverValue'
+            ? (data.tradeValues.byPlayer.get(pid)?.pointsOverWaiver ?? 0)
+            : sort === 'positionValue' ? combinedScore
           : sort === 'ppg'
             ? (value?.breakdown.ppg ??
               prior?.ppg ??
@@ -102,18 +170,46 @@ export function PlayersPage() {
     }
 
     rows.sort((a, b) => b.sortValue - a.sortValue);
-    // Cap the render — a full unfiltered list is ~1800 rows and nobody scrolls
-    // past the first hundred.
-    return rows.slice(0, 150).map((r) => ({
+    return rows;
+  }, [data, group, availability, teamId, sort, deferredQuery, ownerByPid, week, forecasts]);
+
+  // Enrich only the visible rows while keeping the whole player pool reachable.
+  const visibleResults = useMemo(
+    () => results.slice(0, shown).map((r) => ({
       player: enrichPlayer(data, r.pid, week, '', false),
       owner: ownerByPid.get(r.pid)?.name ?? null,
-    }));
-  }, [data, group, availability, teamId, sort, deferredQuery, ownerByPid, week]);
+    })),
+    [data, results, shown, week, ownerByPid],
+  );
+
+  const sortLabels: Record<SortKey, string> = {
+    value: 'League value',
+    waiverValue: 'Value over waivers',
+    positionValue: 'Position score',
+    appProjection: `App projection · Week ${week}`,
+    espnProjection: `ESPN projection · Week ${week}`,
+    ppg: 'PPG',
+    total: 'Total',
+    last4: 'Last 4',
+    boomRate: 'Boom Rate',
+  };
+
+  // More rows appear before the button; keep keyboard readers at the first new
+  // result instead of stranding them beneath the entire added batch.
+  useEffect(() => {
+    if (firstAddedRow.current === null) return;
+    resultsRef.current?.querySelectorAll<HTMLButtonElement>('.player-row')[firstAddedRow.current]?.focus();
+    firstAddedRow.current = null;
+  }, [visibleResults.length]);
 
   return (
     <>
       <div className="page-head">
-        <h1 className="page-title">Available Players</h1>
+        <div>
+          <h1 className="page-title">Players</h1>
+          <p className="small secondary">{fmtLeagueFormat(data.league)}</p>
+        </div>
+        {hasFilters && <button className="btn btn-sm" onClick={resetFilters}>Reset filters</button>}
       </div>
 
       <div className="filters">
@@ -123,80 +219,57 @@ export function PlayersPage() {
           type="search"
           placeholder="Search name or team…"
           value={query}
-          onChange={(e) => setQuery(e.target.value)}
+          maxLength={120}
+          onChange={(e) => updateFilters({ query: e.target.value }, true)}
           aria-label="Search players"
         />
 
         <div className="segmented" role="group" aria-label="Availability">
           <button
             aria-pressed={availability === 'free'}
-            onClick={() => {
-              setAvailability('free');
-              setTeamId('ALL');
-            }}
+            onClick={() => updateFilters({ availability: 'free', teamId: 'ALL' })}
           >
             Free agents
           </button>
           <button
             aria-pressed={availability === 'rostered'}
-            onClick={() => {
-              setAvailability('rostered');
-              setTeamId('ALL');
-            }}
+            onClick={() => updateFilters({ availability: 'rostered', teamId: 'ALL' })}
           >
             Rostered
           </button>
           <button
             aria-pressed={availability === 'all'}
-            onClick={() => {
-              setAvailability('all');
-              setTeamId('ALL');
-            }}
+            onClick={() => updateFilters({ availability: 'all', teamId: 'ALL' })}
           >
             All
           </button>
         </div>
 
-        <div className="segmented" role="group" aria-label="Sort by">
-          <button aria-pressed={sort === 'value'} onClick={() => setSort('value')}>
-            Value
-          </button>
-          <button aria-pressed={sort === 'ppg'} onClick={() => setSort('ppg')}>
-            PPG
-          </button>
-          <button aria-pressed={sort === 'total'} onClick={() => setSort('total')}>
-            Total
-          </button>
-          {/*
-            Last 4 is the one sort with no prior-season answer: last season's
-            closing four weeks are not this player's recent form, they are a
-            different roster's. It is dropped rather than filled in with
-            something else under its own label.
-          */}
-          {!data.ranks.fromPrior && (
-            <button aria-pressed={sort === 'last4'} onClick={() => setSort('last4')}>
-              Last 4
-            </button>
-          )}
-          <button aria-pressed={sort === 'boomRate'} onClick={() => setSort('boomRate')}>
-            Boom Rate
-          </button>
-        </div>
-
-        {data.ranks.fromPrior && (
-          <span className="small muted" style={{ alignSelf: 'center' }}>
-            PPG, Total and Boom Rate are {data.ranks.season} finishes
-          </span>
-        )}
+        <label className="row small muted" style={{ gap: 8 }}>
+          Sort by
+          <select
+            className="select"
+            style={{ minWidth: 0, maxWidth: '100%' }}
+            value={sort}
+            onChange={(e) => {
+              const next = SORT_KEYS.find((key) => key === e.target.value);
+              if (next) updateFilters({ sort: next });
+            }}
+          >
+            {SORT_KEYS.filter((key) => key !== 'last4' || !data.ranks.fromPrior).map((key) => (
+              <option key={key} value={key}>{sortLabels[key]}</option>
+            ))}
+          </select>
+        </label>
       </div>
 
       <div className="filters">
         <div className="segmented" role="group" aria-label="Position group">
-          <button aria-pressed={group === 'ALL'} onClick={() => setGroup('ALL')}>
+          <button aria-pressed={group === 'ALL'} onClick={() => updateFilters({ group: 'ALL' })}>
             All
           </button>
           {POSITION_GROUPS.map((g) => (
-            <button key={g} aria-pressed={group === g} onClick={() => setGroup(g)}>
+            <button key={g} aria-pressed={group === g} onClick={() => updateFilters({ group: g })}>
               {g}
             </button>
           ))}
@@ -204,48 +277,100 @@ export function PlayersPage() {
       </div>
 
       <div className="filters">
-        <div className="segmented" role="group" aria-label="Fantasy team">
-          <button aria-pressed={teamId === 'ALL'} onClick={() => setTeamId('ALL')}>
-            All fantasy teams
-          </button>
-          {data.teams.map((team) => (
-            <button
-              key={team.teamId}
-              aria-pressed={teamId === team.teamId}
-              onClick={() => {
-                setAvailability('rostered');
-                setTeamId(team.teamId);
-              }}
-            >
-              {team.name}
-            </button>
-          ))}
-        </div>
+        <label className="row small muted" style={{ gap: 8, maxWidth: '100%' }}>
+          Fantasy team
+          <select
+            className="select"
+            style={{ minWidth: 0, maxWidth: '100%' }}
+            value={teamId}
+            onChange={(e) => {
+              const id = Number(e.target.value);
+              updateFilters(e.target.value === 'ALL' ? { teamId: 'ALL' }
+                : { availability: 'rostered', teamId: id });
+            }}
+          >
+            <option value="ALL">All fantasy teams</option>
+            {data.teams.map((team) => (
+              <option key={team.teamId} value={team.teamId}>{team.name}</option>
+            ))}
+          </select>
+        </label>
       </div>
 
+      <p className="small muted" style={{ marginBottom: 14 }}>
+        {sort === 'value'
+          ? `Expected rest-of-season points above starter replacement in this ${data.league.size}-team league, through Week ${data.playoff.finalWeek}. Comparable across positions.`
+          : sort === 'waiverValue'
+            ? `Expected rest-of-season points above the best available waiver option at each position, through Week ${data.playoff.finalWeek}. This measures player value; roster fit determines which pickups help your team.`
+          : sort === 'positionValue'
+            ? 'Value Score (0–1000) compares players within their own position. It blends current production with rest-of-season outlook.'
+          : sort === 'appProjection'
+          ? `Week ${week} app projections are pregame medians, with ESPN used when an app estimate is unavailable.`
+          : sort === 'espnProjection'
+            ? `Week ${week} ESPN projections use this league's scoring settings.`
+            : data.ranks.fromPrior ? `PPG, Total and Boom Rate are ${data.ranks.season} finishes.`
+              : 'Ranked using this league’s scoring settings.'}
+      </p>
+
       {results.length === 0 ? (
-        <EmptyState
-          title="No players match"
-          hint="Try a different fantasy team, position group, or clear the search."
-        />
+        <div className="stack" style={{ gap: 10 }}>
+          <EmptyState
+            title="No players match"
+            hint="Try a different fantasy team, position group, or clear the search."
+          />
+          <button className="btn" onClick={resetFilters}>Reset filters</button>
+        </div>
       ) : (
-        <section className="card" style={{ overflow: 'hidden' }}>
-          <div className="group-head group-head--primary">
-            <span>
-              {results.length} shown
-              {results.length === 150 ? ' (top 150)' : ''}
+        <section
+          id="player-results"
+          className="card"
+          style={{ overflow: 'hidden' }}
+          ref={resultsRef}
+          aria-busy={query !== deferredQuery}
+        >
+          <div className="group-head group-head--primary" style={{ flexWrap: 'wrap' }}>
+            <span role="status" aria-live="polite">
+              Showing {visibleResults.length} of {results.length} players
             </span>
+            <span className="small">{sortLabels[sort]}</span>
           </div>
-          {results.map(({ player, owner }, index) => (
+          {visibleResults.map(({ player, owner }, index) => (
             <PlayerRow
               key={player.pid}
               player={player}
               listRank={index + 1}
               appProjection={appProjectionFor(player, forecasts)}
+              primaryProjection={sort === 'appProjection' ? 'app' : sort === 'espnProjection' ? 'espn' : undefined}
               onSelect={setOpenPid}
               note={owner}
+              valueMetric={sort === 'value' || sort === 'waiverValue' ? {
+                label: sort === 'value' ? 'Value' : 'Waiver',
+                value: data.tradeValues.byPlayer.get(player.pid)?.[
+                  sort === 'value' ? 'points' : 'pointsOverWaiver'
+                ] ?? null,
+                description: sort === 'value'
+                  ? 'Expected rest-of-season points above starter replacement'
+                  : 'Expected rest-of-season points above the best available waiver option',
+              } : undefined}
             />
           ))}
+          {visibleResults.length < results.length && (
+            <div className="card-pad" style={{ textAlign: 'center' }}>
+              <button
+                className="btn"
+                aria-controls="player-results"
+                onClick={() => {
+                  firstAddedRow.current = visibleResults.length;
+                  updateFilters({ shown: shown + PAGE_SIZE }, true);
+                }}
+              >
+                Show {Math.min(PAGE_SIZE, results.length - visibleResults.length)} more players
+              </button>
+              <div className="tiny muted" style={{ marginTop: 6 }}>
+                {results.length - visibleResults.length} more match your filters
+              </div>
+            </div>
+          )}
         </section>
       )}
 

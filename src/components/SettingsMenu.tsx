@@ -39,6 +39,7 @@ const RUN_WORKFLOW_URL =
 
 import { useEffect, useRef } from 'react';
 import { useLeague } from '../data/LeagueProvider';
+import { fmtLeagueFormat } from '../lib/labels';
 
 /** "3 minutes ago" — coarse on purpose; precision here would be false. */
 function ago(timestamp: number): string {
@@ -133,7 +134,8 @@ export function SettingsMenu({ open, onClose }: { open: boolean; onClose: () => 
         {data ? (
           <>
             Every page opens on this team. Scoring, rosters and results are read
-            from <strong>{data.league.name}</strong> ({data.season}).
+            from <strong>{data.league.name}</strong> ({data.season}).{' '}
+            {fmtLeagueFormat(data.league)}.
           </>
         ) : (
           <>Loading {league.name}…</>

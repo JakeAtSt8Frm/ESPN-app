@@ -142,6 +142,7 @@ jobs:
           for league in ${{ steps.leagues.outputs.keys }}; do
             echo "::group::$league"
             ESPN_LEAGUE=$league npm run verify
+            ESPN_LEAGUE=$league npm run report:forecast
             echo "::endgroup::"
           done
 
@@ -152,6 +153,8 @@ jobs:
         run: |
           npm run verify:forecast
           npm run verify:lineup
+          npm run verify:lineup-alerts
+          npm run verify:predictions
           npm run verify:power
           npm run verify:trade
           npm run verify:season

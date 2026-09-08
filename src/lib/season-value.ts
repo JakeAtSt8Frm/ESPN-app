@@ -23,8 +23,11 @@
 
 import { clamp01, percentileRanks, round } from './stats';
 import { MATCHUP_INFLUENCE } from './matchup';
+import { startingDepthByGroup } from './replacement';
 import type { PositionGroup, Player } from './types';
 import type { ValueIndex } from './value';
+
+export { startingDepthByGroup } from './replacement';
 
 /**
  * Leg weights, summing to 1.0.
@@ -72,57 +75,6 @@ const VERDICT_GAP = 0.15;
 const VERDICT_MIN_LIQUIDITY = 0.2;
 
 export type RiskBand = 'Low' | 'Moderate' | 'High';
-
-/** Slots that map onto exactly one position group. */
-const SLOT_TO_GROUP: Record<string, PositionGroup> = {
-  QB: 'QB',
-  RB: 'RB',
-  WR: 'WR',
-  TE: 'TE',
-  K: 'K',
-  'D/ST': 'DST',
-};
-
-/**
- * How a FLEX slot divides across the groups eligible for it.
- *
- * This is a stated prior, not a measurement: it is what a PPR flex is usually
- * filled with, and it exists only to place the replacement-level cliff. The
- * league has not played a week yet, so there is nothing to fit it to. It moves
- * the cliff by well under one roster spot per group, which is smaller than the
- * band `replacementPoints` averages over.
- */
-const FLEX_SPLIT: Record<string, Partial<Record<PositionGroup, number>>> = {
-  FLEX: { RB: 0.4, WR: 0.45, TE: 0.15 },
-};
-
-/** How many of each group the league starts in total, across every team. */
-export function startingDepthByGroup(
-  rosterSlots: string[],
-  numTeams: number,
-): Map<PositionGroup, number> {
-  const perTeam = new Map<PositionGroup, number>();
-  const add = (group: PositionGroup, n: number) =>
-    perTeam.set(group, (perTeam.get(group) ?? 0) + n);
-
-  for (const raw of rosterSlots) {
-    const slot = String(raw).toUpperCase();
-    if (slot === 'BN' || slot === 'IR') continue;
-
-    const direct = SLOT_TO_GROUP[slot];
-    if (direct) {
-      add(direct, 1);
-      continue;
-    }
-    for (const [group, share] of Object.entries(FLEX_SPLIT[slot] ?? {})) {
-      add(group as PositionGroup, share ?? 0);
-    }
-  }
-
-  const depth = new Map<PositionGroup, number>();
-  for (const [group, n] of perTeam) depth.set(group, n * numTeams);
-  return depth;
-}
 
 /**
  * Replacement level for a group: what the player at the startable cliff
@@ -181,6 +133,8 @@ export interface SeasonValue {
 export interface SeasonValueIndex {
   byPlayer: Map<string, SeasonValue>;
   replacementByGroup: Map<PositionGroup, number>;
+  /** Projected league-wide starters by position, including allocated FLEX seats. */
+  startingDepthByGroup: Map<PositionGroup, number>;
 }
 
 export interface BuildSeasonValueInput {
@@ -342,8 +296,6 @@ export function buildSeasonValueIndex(input: BuildSeasonValueInput): SeasonValue
     influenceByGroup = MATCHUP_INFLUENCE,
   } = input;
 
-  const depth = startingDepthByGroup(rosterSlots, numTeams);
-
   interface Row {
     pid: string;
     group: PositionGroup;
@@ -441,6 +393,11 @@ export function buildSeasonValueIndex(input: BuildSeasonValueInput): SeasonValue
     else byGroup.set(row.group, [row]);
   }
 
+  const depth = startingDepthByGroup(
+    rosterSlots,
+    numTeams,
+    rows.flatMap((row) => row.restPoints === null ? [] : [{ group: row.group, points: row.restPoints }]),
+  );
   const replacementByGroup = new Map<PositionGroup, number>();
   for (const [group, list] of byGroup) {
     const sorted = list
@@ -558,5 +515,5 @@ export function buildSeasonValueIndex(input: BuildSeasonValueInput): SeasonValue
     }
   }
 
-  return { byPlayer, replacementByGroup };
+  return { byPlayer, replacementByGroup, startingDepthByGroup: depth };
 }

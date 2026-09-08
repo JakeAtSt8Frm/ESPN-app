@@ -18,6 +18,7 @@ import {
   StatusBadge,
   ValueChip,
   fmt1,
+  fmtSigned,
 } from './primitives';
 import type { EnrichedPlayer, RankInfo } from '../lib/types';
 
@@ -28,10 +29,14 @@ interface Props {
   showProjection?: boolean;
   /** The app's bias- and matchup-adjusted median, shown before ESPN's. */
   appProjection?: number | null;
+  /** Keep the active projection sort visible when a narrow row has room for one score. */
+  primaryProjection?: 'app' | 'espn';
   /** Extra context appended to the second line, e.g. the rostering team. */
   note?: string | null;
   /** The player's place in the currently filtered and sorted list. */
   listRank?: number;
+  /** The points used by a league-value sort, replacing the within-position chip. */
+  valueMetric?: { label: string; value: number | null; description: string };
 }
 
 const RESERVE_SLOTS = new Set(['BN', 'IR']);
@@ -147,9 +152,14 @@ export function PlayerRow({
   onSelect,
   showProjection = true,
   appProjection,
+  primaryProjection,
   note,
   listRank,
+  valueMetric,
 }: Props) {
+  const useAppProjection = primaryProjection === 'app' && appProjection != null;
+  const primaryScore = useAppProjection ? appProjection : p.proj;
+  const projectionFirst = primaryProjection !== undefined;
   const delta = p.hasPlayed && p.proj > 0 ? p.act - p.proj : null;
   const positionRankLabel = `${p.totalRank ? `total rank ${p.totalRank.rank}` : 'total rank unavailable'}, ${
     p.ppgRank ? `PPG rank ${p.ppgRank.rank}` : 'PPG rank unavailable'
@@ -163,7 +173,7 @@ export function PlayerRow({
       onClick={() => onSelect?.(p.pid)}
       className={`player-row${listRank === undefined ? '' : ' player-row--ranked'}`}
       aria-label={`${listRank === undefined ? '' : `Rank ${listRank}, `}${p.name}, ${p.group ?? 'unknown position'}, ${
-        p.hasPlayed ? `scored ${fmt1(p.act)}` : `projected ${fmt1(p.proj)}`
+        p.hasPlayed && !projectionFirst ? `scored ${fmt1(p.act)}` : `${useAppProjection ? 'app ' : ''}projected ${fmt1(primaryScore)}`
       }, ${positionRankLabel}`}
     >
       {listRank !== undefined && (
@@ -179,7 +189,11 @@ export function PlayerRow({
       <span className="player-row__id">
         <span className="player-row__title">
           <span className="player-row__name">{p.name}</span>
-          <ValueChip score={p.valueScore} />
+          {valueMetric ? (
+            <span className="chip chip-outline mono" title={valueMetric.description}>
+              {valueMetric.label} {valueMetric.value === null ? '—' : fmtSigned(valueMetric.value)}
+            </span>
+          ) : <ValueChip score={p.valueScore} />}
           <PositionRanks player={p} />
           {p.isOut && (
             <span className="chip" style={{ color: 'var(--danger-text)' }}>
@@ -209,7 +223,7 @@ export function PlayerRow({
       */}
       {showProjection && (
         <span
-          className={`player-row__num mono${p.hasPlayed ? ' player-row__num--minor' : ''}`}
+          className={`player-row__num mono${p.hasPlayed && !projectionFirst ? ' player-row__num--minor' : ''}`}
           title={
             appProjection === null || appProjection === undefined
               ? 'ESPN projection'
@@ -218,21 +232,21 @@ export function PlayerRow({
           }
         >
           {/*
-            Two forecasts, the app's first and dimmed. The app value is the
-            same adjusted median shown in the player sheet; using the separate
-            history-only projection here was the source of a visible mismatch.
+            The secondary forecast can collapse on a phone; the score used by
+            an explicit projection sort stays visible. The app value is the
+            same adjusted median shown in the player sheet.
           */}
           {appProjection !== null && appProjection !== undefined && (
-            <span className="player-row__own" aria-label={`App projection ${fmt1(appProjection)}`}>
-              {fmt1(appProjection)}
+            <span className="player-row__own" aria-label={`${useAppProjection ? 'ESPN' : 'App'} projection ${fmt1(useAppProjection ? p.proj : appProjection)}`}>
+              {fmt1(useAppProjection ? p.proj : appProjection)}
             </span>
           )}
-          {fmt1(p.proj)}
+          {fmt1(primaryScore)}
         </span>
       )}
 
       <span
-        className={`player-row__num mono bold${p.hasPlayed ? '' : ' player-row__num--minor'}`}
+        className={`player-row__num mono bold${p.hasPlayed && !projectionFirst ? '' : ' player-row__num--minor'}`}
         title="Actual Score"
       >
         {p.hasPlayed ? fmt1(p.act) : '—'}

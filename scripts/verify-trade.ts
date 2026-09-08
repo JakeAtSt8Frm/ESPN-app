@@ -17,6 +17,7 @@ import {
   summarizeTrade,
 } from '../src/lib/trade';
 import type { PriorPair } from '../src/lib/forecast';
+import type { ReplacementCandidate } from '../src/lib/replacement';
 import type { Player, PositionGroup } from '../src/lib/types';
 
 let failures = 0;
@@ -112,19 +113,78 @@ process.stdout.write('\ndrift and reliability\n');
 process.stdout.write('\nreplacement level\n');
 
 {
-  const slots = startingSlotsByGroup(ROSTER_SLOTS, 8);
+  const candidates: ReplacementCandidate[] = [];
+  for (const group of ['RB', 'WR', 'TE'] as const) {
+    for (let rank = 1; rank <= 40; rank++) {
+      candidates.push({ group, points: (group === 'WR' ? 40 : 20) - rank * 0.5 });
+    }
+  }
+  const slots = startingSlotsByGroup(ROSTER_SLOTS, 8, candidates);
   check('counts one starting QB per team', slots.get('QB') === 8, `got ${slots.get('QB')}`);
   check(
-    'splits the flex across RB, WR and TE rather than double-counting it',
-    near(slots.get('RB')!, 19.2) && near(slots.get('WR')!, 19.6) && near(slots.get('TE')!, 9.2),
+    'allocates each FLEX once using projections after reserving dedicated starters',
+    slots.get('RB') === 16 && slots.get('WR') === 24 && slots.get('TE') === 8 &&
+      [...slots.values()].reduce((sum, count) => sum + count, 0) === 72,
     `RB ${slots.get('RB')} WR ${slots.get('WR')} TE ${slots.get('TE')}`,
   );
-  check('ignores bench and IR slots', startingSlotsByGroup(['QB', 'BN', 'BN', 'IR'], 4).get('QB') === 4);
+  check('ignores bench and IR slots', startingSlotsByGroup(['QB', 'BN', 'BN', 'IR'], 4, []).get('QB') === 4);
+
+  const twelveTeams = startingSlotsByGroup(ROSTER_SLOTS, 12, candidates);
+  check(
+    'larger leagues move the starter cliff deeper into the player pool',
+    twelveTeams.get('QB') === 12 && twelveTeams.get('WR') === 36,
+  );
+  const tied = startingSlotsByGroup(['FLEX'], 1, [
+    { group: 'RB', points: 10 },
+    { group: 'WR', points: 10 },
+    { group: 'TE', points: 9 },
+  ]);
+  check(
+    'a tie at the FLEX cutoff shares demand without arbitrary positional preference',
+    tied.get('RB') === 0.5 && tied.get('WR') === 0.5 && !tied.has('TE'),
+  );
+  const partial = startingSlotsByGroup(['RB', 'FLEX', 'FLEX'], 1, [
+    { group: 'RB', points: 20 },
+    { group: 'WR', points: 12 },
+  ]);
+  check(
+    'a thin projection pool cannot start the same player in dedicated and FLEX seats',
+    partial.get('RB') === 1 && partial.get('WR') === 1,
+  );
 }
 
 // ------------------------------------------------------------ trade values --
 
 process.stdout.write('\ntrade values\n');
+
+{
+  const playersById = new Map<string, Player>();
+  const weeklyProjections = new Map<string, Map<number, number>>();
+  for (const group of ['RB', 'WR', 'TE'] as const) {
+    for (let rank = 1; rank <= 40; rank++) {
+      const pid = `${group}${rank}`;
+      const points = (group === 'WR' ? 40 : 20) - rank * 0.5;
+      playersById.set(pid, player(pid, group));
+      weeklyProjections.set(pid, new Map([[1, points]]));
+    }
+  }
+  const values = buildTradeValues({
+    playersById,
+    weeklyProjections,
+    rosteredIds: new Set(),
+    rosterSlots: ROSTER_SLOTS,
+    numTeams: 8,
+    fromWeek: 1,
+    finalWeek: 1,
+  });
+  check(
+    'all eight FLEX starters come from WR when its remaining projections are strongest',
+    values.replacementPerWeek.get('WR') === 28 &&
+      values.replacementPerWeek.get('RB') === 12 &&
+      values.replacementPerWeek.get('TE') === 16,
+    `RB ${values.replacementPerWeek.get('RB')}, WR ${values.replacementPerWeek.get('WR')}, TE ${values.replacementPerWeek.get('TE')}`,
+  );
+}
 
 {
   /*
@@ -154,10 +214,11 @@ process.stdout.write('\ntrade values\n');
 
   /*
    * Rosters matter to the model, so the fixture has to have them. Thirty of the
-   * forty backs are held, which is a surplus over the 19.2 the league starts and
-   * therefore a real weekly start decision; all twelve kickers are held against
-   * eight starting slots, which is not. That difference is the point of the two
-   * monotonicity checks below.
+   * forty backs are held, which is a surplus over the 24 the league starts —
+   * sixteen dedicated plus all eight FLEX seats, there being no receivers or
+   * tight ends here to take them — and therefore a real weekly start decision;
+   * all twelve kickers are held against eight starting slots, which is not.
+   * That difference is the point of the two monotonicity checks below.
    */
   const rostered = new Set<string>([
     ...Array.from({ length: 30 }, (_, i) => `rb${i}`),
@@ -261,9 +322,20 @@ process.stdout.write('\ntrade values\n');
     summarizeTrade(['rb0'], ['rb30'], values).favors === 'B' &&
       summarizeTrade(['rb30'], ['rb0'], values).favors === 'A',
   );
+  /*
+   * Presence and absence, not a particular number.
+   *
+   * This asserted `RB === 1` while starter demand was a fixed positional split
+   * of the FLEX seats. Allocating them by projection instead — see
+   * `startingDepthByGroup` — correctly gives all eight to running backs here,
+   * because the fixture contains no receivers or tight ends to compete for
+   * them, so RB starter demand is 24 rather than 19.2 and the surplus is a
+   * genuine 0.75 rather than a clamped 1. The premium being *on* is the claim;
+   * the exact weight is the model's to decide.
+   */
   check(
     'the option premium is on where there is a bench and off where there is not',
-    values.optionWeightByGroup.get('RB') === 1 && values.optionWeightByGroup.get('K') === 0,
+    values.optionWeightByGroup.get('RB')! > 0 && values.optionWeightByGroup.get('K') === 0,
     `RB ${values.optionWeightByGroup.get('RB')}, K ${values.optionWeightByGroup.get('K')}`,
   );
 }

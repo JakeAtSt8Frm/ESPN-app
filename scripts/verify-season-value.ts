@@ -112,6 +112,35 @@ check(
   `RB ${totalWeight('rb')}, DST ${totalWeight('dst')}`,
 );
 
+{
+  const playersById = new Map<string, Player>();
+  const weeklyProjections = new Map<string, Map<number, number>>();
+  for (const group of ['RB', 'WR', 'TE'] as const) {
+    for (let rank = 1; rank <= 40; rank++) {
+      const pid = `${group}${rank}`;
+      playersById.set(pid, player(pid, group));
+      weeklyProjections.set(pid, new Map([[1, (group === 'WR' ? 40 : 20) - rank * 0.5]]));
+    }
+  }
+  const index = buildSeasonValueIndex({
+    valueIndex,
+    playersById,
+    weeklyProjections,
+    weeklyOpportunities: new Map(),
+    rosterSlots: ['RB', 'RB', 'WR', 'WR', 'TE', 'FLEX'],
+    numTeams: 8,
+    fromWeek: 1,
+    finalWeek: 1,
+  });
+  check(
+    'season replacement reserves fixed starters before allocating FLEX by scored projections',
+    index.replacementByGroup.get('WR') === 28 &&
+      index.replacementByGroup.get('RB') === 12 &&
+      index.replacementByGroup.get('TE') === 16,
+    `RB ${index.replacementByGroup.get('RB')}, WR ${index.replacementByGroup.get('WR')}, TE ${index.replacementByGroup.get('TE')}`,
+  );
+}
+
 process.stdout.write(
   `\n${failures === 0 ? 'all checks passed' : `${failures} check(s) failed`}\n`,
 );

@@ -790,6 +790,45 @@ TTL guessing, and a reader who is already current re-fetches one small file.
 | **History** | Season trend: Projected vs Actual vs Optimal, week by week |
 | **Draft** | The board, every pick against its ADP, and draft grades |
 | **Trade** | Any number of players against any number, priced in points |
+| **Prediction Lab** | Start/sit probabilities, custom points targets, outcome distributions, and season-holdout validation |
+
+### Prediction Lab
+
+Compare two projected players from your roster, the free-agent pool, or the whole
+league. The lab shows expected points, the median if active, an 80% outcome range,
+and the probability of scoring **strictly more than** a chosen target. Its
+20,000-simulation head-to-head comparison preserves shared NFL-team effects and
+reports ties separately. It checks whether the players share a starting slot;
+ownership and game locks still determine whether a move is available in ESPN.
+
+The displayed mean and spread now integrate the same floored quantile distribution
+that the simulator samples. Previously, the simulator enforced its score floor
+while the expected-points calculation used the unfloored distribution. Target
+probabilities also respect that floor and repeated quantile knots at the minimum.
+`npm run verify:predictions` checks these cases against analytic answers and
+simulated outcomes.
+
+`npm run report:forecast` builds the track record from real, recorded weekly
+projection/result pairs. It trains on 2023 to test 2024, then trains on 2023–2024
+to test 2025, without fitting on either test season. The report uses each season's
+player positions and this league's scoring rules. It measures the **base scoring
+distribution**, including non-appearances with a recorded projection and game log;
+it does not validate opponent adjustments, individual bias adjustments, or
+head-to-head probabilities. Results are retained by position so a model that loses
+to ESPN in a position cannot hide behind the overall average. Reports are rebuilt
+for each league in the snapshot deployment workflow, and the browser rejects a
+report with different scoring rules.
+
+The lab uses pregame estimates from the saved snapshot. A past-week replay uses
+today's fitted model, not an archived prediction from that week. Optimal Lineup
+keeps forecasts available during a week in progress and offers a separate Results
+view, so one Thursday result cannot turn the remaining forecast into zeroes.
+
+Player browsing supports weekly App/ESPN sorts, filter URLs that restore with
+Back/Forward, and incremental browsing of the entire matching pool. On phones,
+the score used by the selected projection sort stays visible. The team overview
+flags missing starting slots, byes, and current injury concerns; current injuries
+are excluded when reviewing historical lineups.
 
 Any player is clickable for a detail sheet carrying, among other things, his
 whole schedule: opponent, bye, the matchup rating for his position that week,
@@ -1131,6 +1170,9 @@ CVD-validated categorical pair, since a line cannot label every point.
 
 ## Keyboard and assistive technology
 
+- **Phone navigation.** Four primary destinations use full-width touch targets.
+  More opens a native modal sheet with the remaining pages, Escape dismissal,
+  and focus restoration. Changing pages returns to the top of the new content.
 - **The player sheet is a real modal.** `aria-modal` says the page behind is
   inert but does nothing to the tab order, so focus is trapped inside the sheet
   and cycled at its edges. On close it returns to the row that opened it.

@@ -24,6 +24,7 @@ import {
   scaleFor,
   scoreAtQuantile,
   type PlayerForecast,
+  type PriorPair,
   type ResidualFit,
 } from '../src/lib/forecast';
 import { simulateSeason, simulateWeek, type SimTeam } from '../src/lib/simulate';
@@ -255,6 +256,72 @@ check(
   empty.biasByPlayer.size === 0,
   `${empty.biasByPlayer.size} players carried a bias`,
 );
+
+// An absence belongs in availability, not also in the conditional played shape.
+// The same observations must produce the same forecast through either input path.
+const attendancePairs: PriorPair[] = Array.from({ length: 120 }, (_, i) => ({
+  pid: `p${i}`,
+  projection: 10,
+  actual: i < 90 ? [-2, 0, 10, 20][i % 4] : 0,
+  played: i < 90,
+  week: 1,
+  team: '',
+}));
+const attendanceInput = {
+  scoringModel,
+  playersById: season.playersById,
+  weekStats: new Map<number, Record<string, StatLine>>(),
+  weekProjections: new Map<number, Record<string, StatLine>>(),
+  throughWeek: 0,
+};
+const borrowedAttendance = fitResidualModel({
+  ...attendanceInput,
+  priorPairs: new Map([['RB', attendancePairs]]),
+});
+const recordedAttendance = fitResidualModel({
+  ...attendanceInput,
+  throughWeek: 1,
+  weekStats: new Map([[1, Object.fromEntries(attendancePairs.map((pair) => [
+    pair.pid,
+    pair.played ? { ...line(pair.actual), gp: 1 } : {},
+  ]))]]),
+  weekProjections: new Map([[1, Object.fromEntries(attendancePairs.map((pair) => [
+    pair.pid, line(pair.projection),
+  ]))]]),
+});
+const attendanceFit = borrowedAttendance.byGroup.get('RB');
+check(
+  'borrowed shape counts only played outcomes, including zero and negative scores',
+  attendanceFit?.samples === 90 && attendanceFit.floor === -2,
+  `samples ${attendanceFit?.samples}, floor ${attendanceFit?.floor}`,
+);
+near('borrowed availability still counts every projected absence', attendanceFit?.playRate ?? -1, 0.75, 0);
+const forecastAttendance = (residualModel: typeof model) => buildWeekForecast({
+  model: residualModel,
+  scoringModel,
+  playersById: season.playersById,
+  projections: { p200: line(10) },
+}).get('p200');
+const borrowedOutcome = forecastAttendance(borrowedAttendance);
+const recordedOutcome = forecastAttendance(recordedAttendance);
+near(
+  'borrowed and recorded histories give the same expected points without counting DNP twice',
+  borrowedOutcome?.mean ?? -1,
+  recordedOutcome?.mean ?? -2,
+  0,
+);
+check(
+  'borrowed and recorded histories give the same downside and upside',
+  borrowedOutcome?.p10 === recordedOutcome?.p10 &&
+    borrowedOutcome?.p90 === recordedOutcome?.p90,
+);
+const absentOnly = fitResidualModel({
+  ...attendanceInput,
+  priorPairs: new Map([['RB', attendancePairs.map((pair) => ({
+    ...pair, actual: 0, played: false,
+  }))]]),
+});
+check('absences alone cannot supply a played-score distribution', !absentOnly.byGroup.has('RB'));
 
 const own = fitResidualModel({
   scoringModel,

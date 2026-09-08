@@ -8,7 +8,7 @@
  * the header went to the thing that actually varies — how old the snapshot is.
  */
 
-import { Suspense, useEffect, useState } from 'react';
+import { Suspense, useEffect, useRef, useState } from 'react';
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import { useLeague } from '../data/LeagueProvider';
 import { ErrorBoundary } from './ErrorBoundary';
@@ -27,9 +27,10 @@ interface NavItem {
 
 const NAV: NavItem[] = [
   { to: '/teams', label: 'Teams', short: 'Teams', icon: '▣', prefetch: () => import('../pages/Teams') },
-  { to: '/matchups', label: 'Matchups', short: 'Vs', icon: '⟷', prefetch: () => import('../pages/Matchups') },
-  { to: '/optimal', label: 'Optimal Lineup', short: 'Optimal', icon: '✦', prefetch: () => import('../pages/Optimal') },
+  { to: '/matchups', label: 'Matchups', short: 'Matchups', icon: '⟷', prefetch: () => import('../pages/Matchups') },
+  { to: '/optimal', label: 'Optimal Lineup', short: 'Lineup', icon: '✦', prefetch: () => import('../pages/Optimal') },
   { to: '/players', label: 'Players', short: 'Players', icon: '⌕', prefetch: () => import('../pages/Players') },
+  { to: '/predictions', label: 'Prediction Lab', short: 'Predict', icon: '◉', prefetch: () => import('../pages/Predictions') },
   { to: '/schedule', label: 'Schedule', short: 'Sched', icon: '▦', prefetch: () => import('../pages/Schedule') },
   { to: '/analytics', label: 'Analytics', short: 'Stats', icon: '◨', prefetch: () => import('../pages/Analytics') },
   { to: '/history', label: 'History', short: 'History', icon: '◷', prefetch: () => import('../pages/History') },
@@ -46,6 +47,115 @@ const NAV: NavItem[] = [
  */
 function warm(item: NavItem) {
   void item.prefetch().catch(() => {});
+}
+
+const MORE_DESCRIPTIONS: Record<string, string> = {
+  '/predictions': 'Start/sit odds and forecast accuracy',
+  '/schedule': 'Upcoming games and bye weeks',
+  '/analytics': 'Power rankings and playoff odds',
+  '/history': 'Results and season trends',
+  '/trade': 'Compare trade value and roster fit',
+  '/draft': 'Draft picks and team grades',
+};
+
+function MobileNavigation() {
+  const dialogRef = useRef<HTMLDialogElement>(null);
+  const [open, setOpen] = useState(false);
+  const { pathname } = useLocation();
+  const secondaryItems = NAV.slice(4);
+  const secondaryActive = secondaryItems.some((item) => item.to === pathname);
+
+  useEffect(() => {
+    const dialog = dialogRef.current;
+    if (!open || !dialog) return;
+    dialog.showModal();
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    const desktop = window.matchMedia('(min-width: 761px)');
+    const closeOnDesktop = () => {
+      if (desktop.matches) dialog.close();
+    };
+    desktop.addEventListener('change', closeOnDesktop);
+    return () => {
+      desktop.removeEventListener('change', closeOnDesktop);
+      document.body.style.overflow = previousOverflow;
+      dialog.close();
+    };
+  }, [open]);
+
+  // Browser Back can change the route while the sheet is open too.
+  useEffect(() => {
+    dialogRef.current?.close();
+  }, [pathname]);
+
+  return (
+    <>
+      <nav className="bottom-nav" aria-label="Main">
+        {NAV.slice(0, 4).map((item) => (
+          <NavLink
+            key={item.to}
+            to={item.to}
+            aria-label={item.label}
+            className={({ isActive }) => `bottom-nav__link${isActive ? ' is-active' : ''}`}
+            onTouchStart={() => warm(item)}
+            onMouseEnter={() => warm(item)}
+            onFocus={() => warm(item)}
+          >
+            <span className="bottom-nav__icon" aria-hidden="true">{item.icon}</span>
+            <span className="bottom-nav__label">{item.short}</span>
+          </NavLink>
+        ))}
+        <button
+          className={`bottom-nav__link${secondaryActive || open ? ' is-active' : ''}`}
+          aria-haspopup="dialog"
+          aria-expanded={open}
+          aria-controls="more-navigation"
+          onClick={() => setOpen(true)}
+        >
+          <span className="bottom-nav__icon" aria-hidden="true">•••</span>
+          <span className="bottom-nav__label">More</span>
+        </button>
+      </nav>
+      <dialog
+        id="more-navigation"
+        className="more-nav"
+        ref={dialogRef}
+        aria-labelledby="more-navigation-title"
+        onClose={() => setOpen(false)}
+        onClick={(event) => {
+          if (event.target === event.currentTarget) dialogRef.current?.close();
+        }}
+      >
+        <div className="more-nav__inner">
+          <div className="row-between more-nav__head">
+            <h2 id="more-navigation-title">Explore your league</h2>
+            <button className="btn btn-ghost" aria-label="Close navigation" onClick={() => dialogRef.current?.close()}>
+              ✕
+            </button>
+          </div>
+          <nav aria-label="More pages">
+            {secondaryItems.map((item) => (
+              <NavLink
+                key={item.to}
+                to={item.to}
+                className={({ isActive }) => `more-nav__link${isActive ? ' is-active' : ''}`}
+                onClick={() => dialogRef.current?.close()}
+                onTouchStart={() => warm(item)}
+                onFocus={() => warm(item)}
+              >
+                <span className="more-nav__icon" aria-hidden="true">{item.icon}</span>
+                <span className="grow">
+                  <span className="bold">{item.label}</span>
+                  <span className="more-nav__description">{MORE_DESCRIPTIONS[item.to]}</span>
+                </span>
+                <span aria-hidden="true">›</span>
+              </NavLink>
+            ))}
+          </nav>
+        </div>
+      </dialog>
+    </>
+  );
 }
 
 export function AppShell() {
@@ -77,6 +187,14 @@ export function AppShell() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const headerHidden = useHideOnScroll();
   const location = useLocation();
+  const previousPath = useRef(location.pathname);
+
+  useEffect(() => {
+    if (previousPath.current === location.pathname) return;
+    previousPath.current = location.pathname;
+    window.scrollTo({ top: 0, behavior: 'instant' });
+    document.getElementById('main')?.focus({ preventScroll: true });
+  }, [location.pathname]);
 
   const weeks = data ? Array.from({ length: data.maxWeek }, (_, i) => i + 1) : [];
   /*
@@ -244,23 +362,7 @@ export function AppShell() {
         )}
       </main>
 
-      <nav className="bottom-nav" aria-label="Main">
-        {NAV.map((item) => (
-          <NavLink
-            key={item.to}
-            to={item.to}
-            className={({ isActive }) => `bottom-nav__link${isActive ? ' is-active' : ''}`}
-            onTouchStart={() => warm(item)}
-            onMouseEnter={() => warm(item)}
-            onFocus={() => warm(item)}
-          >
-            <span className="bottom-nav__icon" aria-hidden="true">
-              {item.icon}
-            </span>
-            <span className="bottom-nav__label">{item.short}</span>
-          </NavLink>
-        ))}
-      </nav>
+      <MobileNavigation />
     </div>
   );
 }

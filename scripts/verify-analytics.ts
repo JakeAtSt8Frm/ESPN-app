@@ -113,6 +113,83 @@ near('weekly actual', values.weeklyScores.get('dst')?.[0]?.actual, 6);
 near('weekly projection', values.weeklyScores.get('dst')?.[0]?.projected, 7);
 near('forecast input', values.byPlayer.get('dst')?.breakdown.forecastProjection, 7);
 
+process.stdout.write('\nhalf-PPR value uses opponent games and distinguishes byes from absences\n');
+const halfPprScoring = compileScoring({ rec: 0.5, rec_yd: 0.1 });
+const receiver = (pid: string, byeWeek: number | null = null): Player => ({
+  ...player,
+  playerId: pid,
+  name: pid,
+  group: 'WR',
+  eligibleSlots: ['WR', 'FLEX'],
+  byeWeek,
+});
+const receiverStats: StatLine = { gp: 1, rec: 4, rec_tgt: 8, rec_yd: 180 };
+function scheduleValue(extraPlayers: Record<string, StatLine> = {}) {
+  const stats = { star: receiverStats, peer: receiverStats, ...extraPlayers };
+  return buildValueIndex({
+    scoringModel: halfPprScoring,
+    playersById: new Map(Object.keys(stats).map((pid) => [pid, receiver(pid)])),
+    season: '2026',
+    weekStats: new Map([[1, stats]]),
+    weekProjections: new Map(),
+    weekOpponents: new Map([[1, { star: 'A', peer: 'B', backup: 'A' }]]),
+    throughWeek: 1,
+  }).byPlayer.get('star')?.breakdown;
+}
+near('four receptions add two half-PPR points', scheduleValue()?.ppg, 20);
+near('equal unit production gives a neutral schedule adjustment', scheduleValue()?.scheduleAdjustedPpg, 20);
+near(
+  'a harder opponent still raises schedule-adjusted production',
+  scheduleValue({ peer: { gp: 1, rec_yd: 300 } })?.scheduleAdjustedPpg,
+  25,
+);
+near(
+  'a zero-point backup does not make the same defense look harder',
+  scheduleValue({ backup: { gp: 1 } })?.scheduleAdjustedPpg,
+  20,
+);
+near(
+  'unknown opponents do not distort the known-opponent baseline',
+  scheduleValue({ unknown: { gp: 1, rec_yd: 1000 } })?.scheduleAdjustedPpg,
+  20,
+);
+
+const availabilityPlayers = new Map([
+  ['healthy', receiver('healthy', 3)],
+  ['injured', receiver('injured', 3)],
+  ['futureBye', receiver('futureBye', 7)],
+  ['unknownBye', receiver('unknownBye')],
+  ['playedOnListedBye', receiver('playedOnListedBye', 3)],
+]);
+const availabilityStats = new Map<number, Record<string, StatLine>>();
+for (let week = 1; week <= 6; week++) {
+  const stats: Record<string, StatLine> = {};
+  if (week !== 4) {
+    stats.futureBye = receiverStats;
+    stats.playedOnListedBye = receiverStats;
+  }
+  if (week !== 3) {
+    stats.healthy = receiverStats;
+    stats.unknownBye = receiverStats;
+    if (week !== 4) stats.injured = receiverStats;
+  }
+  availabilityStats.set(week, stats);
+}
+const availabilityValues = buildValueIndex({
+  scoringModel: halfPprScoring,
+  playersById: availabilityPlayers,
+  season: '2026',
+  weekStats: availabilityStats,
+  weekProjections: new Map(),
+  throughWeek: 6,
+});
+const availability = (pid: string) => availabilityValues.byPlayer.get(pid)?.breakdown.availability;
+near('a healthy player is fully available across a known bye', availability('healthy'), 1);
+near('a missed game still reduces availability after removing the bye', availability('injured'), 0.8);
+near('a future bye is not removed early', availability('futureBye'), 0.833);
+near('an unknown bye is not inferred from missing stats', availability('unknownBye'), 0.833);
+near('recorded participation takes precedence over bye metadata', availability('playedOnListedBye'), 0.833);
+
 process.stdout.write('\nboom rate is ranked within position\n');
 const boomPlayersById = new Map<string, Player>([
   ['boom', { ...player, playerId: 'boom', name: 'Boom Player' }],

@@ -581,9 +581,13 @@ export function fitResidualModel(input: FitResidualModelInput): ResidualModel {
     }
 
     if (pairs.length < MIN_OWN_SAMPLES) {
-      const borrowed = priorPairs?.get(group);
-      if (borrowed && borrowed.length > 0) {
-        pairs = borrowed;
+      const borrowed = priorPairs?.get(group) ?? [];
+      const playedPairs = borrowed.filter((pair) => pair.played ?? (pair.actual > 0));
+      if (playedPairs.length >= MIN_BIN_SAMPLES) {
+        // The residual shape is conditional on playing, just like the current
+        // season path above. Fitting DNP zeroes here and mixing in availability
+        // again would count every absence twice.
+        pairs = playedPairs;
         bootstrapped.add(group);
 
         /*
@@ -602,11 +606,7 @@ export function fitResidualModel(input: FitResidualModelInput): ResidualModel {
          * especially a D/ST — can take the field and legitimately score zero.
          * Older pair sources without that flag retain the score-based fallback.
          */
-        const played = borrowed.reduce(
-          (n, pair) => n + ((pair.played ?? (pair.actual > 0)) ? 1 : 0),
-          0,
-        );
-        counts.played = played;
+        counts.played = playedPairs.length;
         counts.projected = borrowed.length;
 
         // Per-player attendance for this group, so a player with his own record
@@ -828,18 +828,50 @@ export function scoreAtQuantile(
   );
 }
 
-/** CDF of the standardised residual — the inverse of `quantileOfZ`. */
-export function cdfOfZ(fit: ResidualFit, z: number): number {
+/** Integrate the same piecewise-linear, floored quantiles the simulator samples. */
+function conditionalMoments(fit: ResidualFit, projection: number, shift: number) {
+  const location = projection + shift;
+  const scale = scaleFor(fit, projection);
+  let first = 0;
+  let second = 0;
+  const segments = fit.shape.length - 1;
+  for (let i = 0; i < segments; i++) {
+    const low = location + scale * fit.shape[i];
+    const high = location + scale * fit.shape[i + 1];
+    if (high <= fit.floor) {
+      first += fit.floor;
+      second += fit.floor ** 2;
+      continue;
+    }
+    // When a segment crosses the floor, integrate its flat and sloped parts
+    // separately. Clamping only its endpoints would overestimate its area.
+    const flat = low < fit.floor ? (fit.floor - low) / (high - low) : 0;
+    const start = Math.max(fit.floor, low);
+    first += flat * fit.floor + (1 - flat) * (start + high) / 2;
+    second += flat * fit.floor ** 2 +
+      (1 - flat) * (start ** 2 + start * high + high ** 2) / 3;
+  }
+  const average = first / segments;
+  return { mean: average, variance: Math.max(0, second / segments - average ** 2) };
+}
+
+/** CDF of the residual; an exclusive boundary excludes mass exactly at `z`. */
+export function cdfOfZ(
+  fit: ResidualFit,
+  z: number,
+  boundary: 'inclusive' | 'exclusive' = 'inclusive',
+): number {
   const knots = fit.shape;
   const last = knots.length - 1;
-  if (z <= knots[0]) return 0;
-  if (z >= knots[last]) return 1;
+  const inclusive = boundary === 'inclusive';
+  if (z < knots[0] || (!inclusive && z === knots[0])) return 0;
+  if (z > knots[last] || (inclusive && z === knots[last])) return 1;
 
   let low = 0;
   let high = last;
   while (high - low > 1) {
     const mid = (low + high) >> 1;
-    if (knots[mid] <= z) low = mid;
+    if (knots[mid] < z || (inclusive && knots[mid] === z)) low = mid;
     else high = mid;
   }
 
@@ -936,7 +968,7 @@ export function mixtureQuantile(
   if (playProb >= 1) return scoreAtQuantile(fit, projection, q, shift);
 
   // Probability a played game finishes at or below zero.
-  const belowZero = cdfOfZ(fit, (0 - projection - shift) / scaleFor(fit, projection));
+  const belowZero = mixtureCdf(fit, projection, 1, 0, shift);
   const negativeMass = playProb * belowZero;
 
   if (q < negativeMass) return scoreAtQuantile(fit, projection, q / playProb, shift);
@@ -951,12 +983,15 @@ export function mixtureCdf(
   playProb: number,
   score: number,
   shift: number,
+  boundary: 'inclusive' | 'exclusive' = 'inclusive',
 ): number {
-  const playedCdf = cdfOfZ(
+  const inclusive = boundary === 'inclusive';
+  const playedCdf = score < fit.floor || (!inclusive && score === fit.floor) ? 0 : cdfOfZ(
     fit,
     (score - projection - shift) / scaleFor(fit, projection),
+    boundary,
   );
-  const didNotPlayMass = score >= 0 ? 1 - playProb : 0;
+  const didNotPlayMass = score > 0 || (inclusive && score === 0) ? 1 - playProb : 0;
   return clamp(didNotPlayMass + playProb * playedCdf, 0, 1);
 }
 
@@ -1035,13 +1070,11 @@ export function buildWeekForecast(input: BuildWeekForecastInput): Map<string, Pl
       playProb = clamp(playProb, 0, 1);
     }
 
-    const scale = scaleFor(fit, projection);
     const biasShift = biasShiftFor(model, pid, group, projection);
     const matchupFactor = clamp(matchupFactors?.get(pid) ?? 1, 0.5, 1.5);
     const matchupShift = projection * (matchupFactor - 1);
     const totalShift = biasShift + matchupShift;
-    const conditionalMean = projection + totalShift + scale * fit.meanZ;
-    const conditionalSd = scale * fit.sdZ;
+    const moments = conditionalMoments(fit, projection, totalShift);
     const boomProb =
       projection >= MIN_MEANINGFUL_PROJECTION
         ? 1 -
@@ -1051,6 +1084,7 @@ export function buildWeekForecast(input: BuildWeekForecastInput): Map<string, Pl
             playProb,
             projection * DEFAULT_BOOM_BUST.boomPct,
             totalShift,
+            'exclusive',
           )
         : null;
     const bustProb =
@@ -1070,13 +1104,13 @@ export function buildWeekForecast(input: BuildWeekForecastInput): Map<string, Pl
       projection: round(projection),
       biasShift: round(biasShift),
       matchupShift: round(matchupShift),
-      median: round(projection + totalShift + scale * fit.medianZ),
-      mean: round(conditionalMean * playProb),
+      median: round(scoreAtQuantile(fit, projection, 0.5, totalShift)),
+      mean: round(moments.mean * playProb),
       // Variance of the DNP mixture: within-branch variance plus the spread
       // between a zero and a played outcome.
       sd: round(
         Math.sqrt(
-          playProb * conditionalSd ** 2 + playProb * (1 - playProb) * conditionalMean ** 2,
+          playProb * moments.variance + playProb * (1 - playProb) * moments.mean ** 2,
         ),
       ),
       p10: round(mixtureQuantile(fit, projection, playProb, 0.1, totalShift)),

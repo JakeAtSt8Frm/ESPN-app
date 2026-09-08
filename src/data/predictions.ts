@@ -16,7 +16,7 @@ import {
   type SimTeam,
   type WeekSimulation,
 } from '../lib/simulate';
-import type { Matchup, PositionGroup } from '../lib/types';
+import type { EnrichedPlayer, Matchup, PositionGroup } from '../lib/types';
 import { buildRosterWeek } from './selectors';
 import { isOut, type LeagueData } from './league';
 
@@ -92,6 +92,16 @@ export function weekForecasts(
 
 /** Which point estimate should drive a forward-looking lineup decision. */
 export type ProjectionSource = 'app' | 'espn';
+
+/** A results view uses recorded scores even when this roster has not played yet. */
+export function actualOptimalLineup(
+  slots: string[],
+  roster: readonly Pick<EnrichedPlayer, 'pid' | 'group' | 'slot' | 'act'>[],
+) {
+  return computeOptimalLineup(slots, roster
+    .filter((player) => player.slot.toUpperCase() !== 'IR')
+    .map((player) => ({ pid: player.pid, group: player.group, points: player.act })));
+}
 
 export interface ProjectedPlayer {
   pid: string;

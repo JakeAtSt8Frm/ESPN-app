@@ -1,0 +1,70 @@
+{
+  "version": 2,
+  "scoringKey": "[[[\"121\",0],[\"def_2pt_ret\",2],[\"def_blk_kick\",0],[\"def_blk_kick_ret_td\",6],[\"def_blk_kick_td\",6],[\"def_fum_rec\",0],[\"def_fum_ret_td\",6],[\"def_int\",0],[\"def_int_td\",6],[\"def_pa_0\",0],[\"def_pa_1_6\",0],[\"def_pa_14_17\",0],[\"def_pa_28_34\",0],[\"def_pa_35_45\",0],[\"def_pa_7_13\",0],[\"def_sack\",0],[\"def_safe\",0],[\"def_safe_1pt\",1],[\"def_st_td\",6],[\"fgm_0_39\",3],[\"fgm_40_49\",4],[\"fgm_50_59\",5],[\"fgm_60p\",6],[\"fgmiss\",-1],[\"fum_lost\",-2],[\"fum_rec_td\",6],[\"pass_2pt\",2],[\"pass_int\",-1],[\"pass_td\",4],[\"pass_yd\",0.04],[\"rec\",0.5],[\"rec_2pt\",2],[\"rec_td\",6],[\"rec_yd\",0.1],[\"rush_2pt\",2],[\"rush_td\",6],[\"rush_yd\",0.1],[\"xpm\",1]],[[\"DST\",[[\"121\",1],[\"def_2pt_ret\",2],[\"def_blk_kick\",2],[\"def_blk_kick_ret_td\",6],[\"def_blk_kick_td\",6],[\"def_fum_rec\",2],[\"def_fum_ret_td\",6],[\"def_int\",2],[\"def_int_td\",6],[\"def_pa_0\",10],[\"def_pa_1_6\",7],[\"def_pa_14_17\",1],[\"def_pa_28_34\",-1],[\"def_pa_35_45\",-4],[\"def_pa_7_13\",4],[\"def_sack\",1],[\"def_safe\",2],[\"def_safe_1pt\",1],[\"def_st_td\",6]]]]]",
+  "folds": [
+    {
+      "training": [
+        2023
+      ],
+      "testing": 2024
+    },
+    {
+      "training": [
+        2023,
+        2024
+      ],
+      "testing": 2025
+    }
+  ],
+  "rows": [
+    {
+      "group": "ALL",
+      "samples": 12470,
+      "modelMae": 4.02436246992783,
+      "espnMae": 4.1892718524458745,
+      "coverage80": 0.7988773055332798
+    },
+    {
+      "group": "QB",
+      "samples": 1096,
+      "modelMae": 6.041833941605843,
+      "espnMae": 6.067591240875922,
+      "coverage80": 0.7928832116788321
+    },
+    {
+      "group": "K",
+      "samples": 1085,
+      "modelMae": 3.817576036866361,
+      "espnMae": 3.810571428571428,
+      "coverage80": 0.7889400921658987
+    },
+    {
+      "group": "WR",
+      "samples": 4322,
+      "modelMae": 3.9152961591855666,
+      "espnMae": 4.158819990745019,
+      "coverage80": 0.8010180472003702
+    },
+    {
+      "group": "TE",
+      "samples": 2236,
+      "modelMae": 3.0300939177101975,
+      "espnMae": 3.1628398926654744,
+      "coverage80": 0.806350626118068
+    },
+    {
+      "group": "RB",
+      "samples": 2643,
+      "modelMae": 4.228653045781311,
+      "espnMae": 4.445694286795306,
+      "coverage80": 0.7990919409761634
+    },
+    {
+      "group": "DST",
+      "samples": 1088,
+      "modelMae": 4.1786305147058895,
+      "espnMae": 4.28232536764706,
+      "coverage80": 0.7904411764705882
+    }
+  ]
+}

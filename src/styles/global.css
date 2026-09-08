@@ -84,7 +84,7 @@ a {
   flex: 1;
 }
 
-@media (max-width: 640px) {
+@media (max-width: 760px) {
   .page {
     padding: 12px 12px 84px; /* room for the bottom tab bar */
   }

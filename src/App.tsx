@@ -33,6 +33,7 @@ const AnalyticsPage = lazy(() =>
 );
 const DraftPage = lazy(() => import('./pages/Draft').then((m) => ({ default: m.DraftPage })));
 const TradePage = lazy(() => import('./pages/Trade').then((m) => ({ default: m.TradePage })));
+const PredictionsPage = lazy(() => import('./pages/Predictions').then((m) => ({ default: m.PredictionsPage })));
 
 export default function App() {
   return (
@@ -48,6 +49,7 @@ export default function App() {
         <Route path="analytics" element={<AnalyticsPage />} />
         <Route path="draft" element={<DraftPage />} />
         <Route path="trade" element={<TradePage />} />
+        <Route path="predictions" element={<PredictionsPage />} />
         <Route path="*" element={<Navigate to="/teams" replace />} />
       </Route>
     </Routes>

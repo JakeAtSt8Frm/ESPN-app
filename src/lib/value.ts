@@ -62,6 +62,7 @@ export interface ValueBreakdown {
   last8: number;
   ewma: number;
   forecastProjection: number | null;
+  /** Games played / elapsed weeks excluding a known, completed bye. */
   availability: number;
   consistency: number;
   floor: number;
@@ -249,28 +250,34 @@ export function buildValueIndex(input: BuildValueIndexInput): ValueIndex {
 
   // Precompute position-group workload totals so a player's role is measured
   // as a share of his own unit. The same pass measures opponent difficulty
-  // from the mean individual performance each defence has allowed.
+  // from each unit's points per opponent game. Counting individual players
+  // would make an opponent look harder whenever a zero-point backup played.
   for (let week = 1; week <= throughWeek; week++) {
     const stats = weekStats.get(week) ?? {};
     const teams = weekTeams?.get(week) ?? {};
     const opponents = weekOpponents?.get(week) ?? {};
+    const defenseGames = new Set<string>();
     for (const [pid, line] of Object.entries(stats)) {
       if (!hasPlayed(line)) continue;
       const group = playersById.get(pid)?.group ?? null;
       if (!group) continue;
 
-      const actual = score(line, group);
-      const groupTotal = groupScoreTotals.get(group) ?? { sum: 0, count: 0 };
-      groupTotal.sum += actual;
-      groupTotal.count++;
-      groupScoreTotals.set(group, groupTotal);
-
       const opponent = opponents[pid];
       if (opponent) {
+        // Both means use the same population; an unknown opponent cannot
+        // contribute only to the league baseline and skew every comparison.
+        const actual = score(line, group);
         const defenseKey = `${group}:${opponent}`;
+        const groupTotal = groupScoreTotals.get(group) ?? { sum: 0, count: 0 };
         const defenseTotal = defenseScoreTotals.get(defenseKey) ?? { sum: 0, count: 0 };
+        groupTotal.sum += actual;
         defenseTotal.sum += actual;
-        defenseTotal.count++;
+        if (!defenseGames.has(defenseKey)) {
+          groupTotal.count++;
+          defenseTotal.count++;
+          defenseGames.add(defenseKey);
+        }
+        groupScoreTotals.set(group, groupTotal);
         defenseScoreTotals.set(defenseKey, defenseTotal);
       }
 
@@ -430,7 +437,12 @@ export function buildValueIndex(input: BuildValueIndexInput): ValueIndex {
     // treating an unprojected player as neutral erased useful demonstrated form.
     const forecastRaw = hasValidProjection(forecastLine) ? score(forecastLine, group) : ppg;
 
-    const availability = throughWeek > 0 ? clamp01(a.games / throughWeek) : 0;
+    const byeWeek = player?.byeWeek;
+    const completedBye =
+      byeWeek != null && Number.isInteger(byeWeek) && byeWeek > 0 && byeWeek <= throughWeek &&
+      !hasPlayed(weekStats.get(byeWeek)?.[pid]);
+    const possibleGames = throughWeek - (completedBye ? 1 : 0);
+    const availability = possibleGames > 0 ? clamp01(a.games / possibleGames) : 0;
     const floor = quantile(a.weekScores, 0.25);
     const ceiling = quantile(a.weekScores, 0.85);
 

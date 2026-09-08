@@ -1,0 +1,287 @@
+.lab-intro {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 24px;
+  margin-bottom: 16px;
+}
+.lab-intro h2 {
+  font-size: 23px;
+  letter-spacing: -0.025em;
+  margin: 4px 0;
+}
+.lab-eyebrow {
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.lab-filters {
+  display: flex;
+  gap: 12px;
+}
+.lab-filters label,
+.lab-picker-label,
+.lab-target-label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+.lab-filters .select {
+  max-width: 240px;
+}
+.lab-player-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  margin-bottom: 16px;
+}
+.lab-player {
+  border-top: 3px solid var(--series-1);
+}
+.lab-player--b {
+  border-top-color: var(--series-2);
+}
+.lab-picker-label {
+  margin-bottom: 16px;
+}
+.lab-picker-label .select {
+  width: 100%;
+  min-width: 0;
+}
+.lab-player h2 {
+  font-size: 20px;
+  letter-spacing: -0.02em;
+}
+
+.lab-injury {
+  color: var(--danger-text);
+  margin-top: 6px;
+}
+.lab-explanation {
+  margin-top: 12px;
+}
+.lab-explanation summary {
+  color: var(--accent);
+  font-size: 12px;
+  cursor: pointer;
+  min-height: 32px;
+}
+.lab-points {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 16px 0;
+}
+.lab-points strong {
+  font: 800 42px var(--font-mono);
+  letter-spacing: -0.06em;
+  color: var(--series-1);
+}
+.lab-player--b .lab-points strong {
+  color: var(--series-2);
+}
+.lab-points span {
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+.lab-metrics {
+  margin: 0;
+}
+.lab-metrics > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 7px 0;
+  border-top: 1px solid var(--border);
+}
+.lab-metrics dt {
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+.lab-metrics dd {
+  margin: 0;
+  font: 600 13px var(--font-mono);
+}
+.lab-target-result {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin: 12px 0 8px;
+  padding: 12px;
+  border-radius: var(--radius-sm);
+  background: var(--accent-wash);
+  font-size: 13px;
+}
+.lab-target-result strong {
+  font: 700 24px var(--font-mono);
+}
+.lab-verdict,
+.lab-distribution,
+.forecast-evidence {
+  margin-bottom: 16px;
+}
+.lab-section-title {
+  font-size: 18px;
+  margin-bottom: 6px;
+}
+.lab-target-label input {
+  width: 110px;
+}
+.lab-odds-labels {
+  align-items: flex-end;
+  margin-top: 20px;
+  font-size: 13px;
+}
+.lab-odds-labels > span {
+  max-width: 45%;
+}
+.lab-odds-labels > span:last-child {
+  text-align: right;
+}
+.lab-odds-labels strong {
+  display: block;
+  font: 700 24px var(--font-mono);
+  margin-top: 4px;
+}
+.lab-odds-bar {
+  display: flex;
+  height: 12px;
+  border-radius: 6px;
+  overflow: hidden;
+  margin: 8px 0;
+  background: var(--surface-sunken);
+}
+.lab-odds-bar > span:first-child {
+  background: var(--series-1);
+}
+.lab-odds-bar > span:last-child {
+  background: var(--series-2);
+}
+.lab-odds-ties {
+  background: var(--text-muted);
+}
+.lab-eligibility {
+  margin-top: 12px;
+}
+.lab-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  font-size: 12px;
+}
+.lab-legend span::before {
+  content: '';
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  margin-right: 6px;
+  border-radius: 50%;
+  background: var(--series-1);
+}
+.lab-legend span:last-child::before {
+  background: var(--series-2);
+}
+.lab-histogram {
+  display: grid;
+  grid-template-columns: repeat(10, minmax(0, 1fr));
+  gap: 8px;
+  margin: 24px 0 8px;
+}
+.lab-histogram > div {
+  min-width: 0;
+  text-align: center;
+  font: 10px var(--font-mono);
+  color: var(--text-secondary);
+}
+.lab-histogram__bars {
+  height: 150px;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 3px;
+  border-bottom: 1px solid var(--border-strong);
+  margin-bottom: 8px;
+}
+.lab-histogram__bars i {
+  width: 35%;
+  background: var(--series-1);
+  border-radius: 3px 3px 0 0;
+}
+.lab-histogram__bars i:last-child {
+  background: var(--series-2);
+}
+.lab-distribution details,
+.forecast-evidence details {
+  margin: 16px 0;
+}
+.lab-distribution summary,
+.forecast-evidence summary {
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--accent);
+  min-height: 32px;
+}
+.lab-evidence-stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+  margin: 18px 0;
+}
+.lab-evidence-stats span {
+  display: block;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+.lab-evidence-stats strong {
+  display: block;
+  font: 700 27px var(--font-mono);
+  margin-top: 4px;
+}
+.lab-evidence-stats small {
+  font-size: 13px;
+  font-weight: 400;
+}
+
+@media (max-width: 900px) {
+  .lab-intro {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 16px;
+  }
+  .lab-filters > label {
+    flex: 1;
+    min-width: 0;
+  }
+  .lab-filters .select {
+    max-width: 100%;
+  }
+}
+@media (max-width: 560px) {
+  .lab-player-grid {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+  .lab-filters {
+    flex-direction: column;
+  }
+  .lab-histogram {
+    gap: 3px;
+  }
+  .lab-histogram__bars {
+    gap: 2px;
+    height: 120px;
+  }
+  .lab-histogram > div {
+    font-size: 8px;
+  }
+  .lab-evidence-stats {
+    gap: 8px;
+  }
+  .lab-evidence-stats strong {
+    font-size: 22px;
+  }
+}

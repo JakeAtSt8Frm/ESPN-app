@@ -1,0 +1,70 @@
+{
+  "version": 2,
+  "scoringKey": "[[[\"def_2pt_ret\",2],[\"def_blk_kick\",0],[\"def_blk_kick_ret_td\",6],[\"def_blk_kick_td\",6],[\"def_fum_rec\",0],[\"def_fum_ret_td\",6],[\"def_int\",0],[\"def_int_td\",6],[\"def_pa_0\",0],[\"def_pa_1_6\",0],[\"def_pa_14_17\",0],[\"def_pa_28_34\",0],[\"def_pa_35_45\",0],[\"def_pa_46p\",0],[\"def_pa_7_13\",0],[\"def_sack\",0],[\"def_safe\",0],[\"def_safe_1pt\",1],[\"def_st_td\",6],[\"def_ya_0_99\",0],[\"def_ya_100_199\",0],[\"def_ya_200_299\",0],[\"def_ya_350_399\",0],[\"def_ya_400_449\",0],[\"def_ya_450_499\",0],[\"def_ya_500_549\",0],[\"def_ya_550p\",0],[\"fgm_0_39\",3],[\"fgm_40_49\",4],[\"fgm_50_59\",5],[\"fgm_60p\",6],[\"fgmiss\",-1],[\"fum_lost\",-2],[\"fum_rec_td\",6],[\"pass_2pt\",2],[\"pass_int\",-2],[\"pass_td\",4],[\"pass_yd\",0.04],[\"rec\",1],[\"rec_2pt\",2],[\"rec_td\",6],[\"rec_yd\",0.1],[\"rush_2pt\",2],[\"rush_td\",6],[\"rush_yd\",0.1],[\"xpm\",1]],[[\"DST\",[[\"def_2pt_ret\",2],[\"def_blk_kick\",2],[\"def_blk_kick_ret_td\",6],[\"def_blk_kick_td\",6],[\"def_fum_rec\",2],[\"def_fum_ret_td\",6],[\"def_int\",2],[\"def_int_td\",6],[\"def_pa_0\",5],[\"def_pa_1_6\",4],[\"def_pa_14_17\",1],[\"def_pa_28_34\",-1],[\"def_pa_35_45\",-3],[\"def_pa_46p\",-5],[\"def_pa_7_13\",3],[\"def_sack\",1],[\"def_safe\",2],[\"def_safe_1pt\",1],[\"def_st_td\",6],[\"def_ya_0_99\",5],[\"def_ya_100_199\",3],[\"def_ya_200_299\",2],[\"def_ya_350_399\",-1],[\"def_ya_400_449\",-3],[\"def_ya_450_499\",-5],[\"def_ya_500_549\",-6],[\"def_ya_550p\",-7]]]]]",
+  "folds": [
+    {
+      "training": [
+        2023
+      ],
+      "testing": 2024
+    },
+    {
+      "training": [
+        2023,
+        2024
+      ],
+      "testing": 2025
+    }
+  ],
+  "rows": [
+    {
+      "group": "ALL",
+      "samples": 12792,
+      "modelMae": 4.388771888680408,
+      "espnMae": 4.535360381488426,
+      "coverage80": 0.7977642276422764
+    },
+    {
+      "group": "QB",
+      "samples": 1096,
+      "modelMae": 6.196669708029207,
+      "espnMae": 6.220264598540141,
+      "coverage80": 0.7947080291970803
+    },
+    {
+      "group": "K",
+      "samples": 1085,
+      "modelMae": 3.817576036866361,
+      "espnMae": 3.810571428571428,
+      "coverage80": 0.7889400921658987
+    },
+    {
+      "group": "WR",
+      "samples": 4426,
+      "modelMae": 4.447146407591517,
+      "espnMae": 4.679412562132864,
+      "coverage80": 0.7973339358337099
+    },
+    {
+      "group": "TE",
+      "samples": 2404,
+      "modelMae": 3.477524958402665,
+      "espnMae": 3.5993261231281184,
+      "coverage80": 0.7999168053244592
+    },
+    {
+      "group": "RB",
+      "samples": 2693,
+      "modelMae": 4.455629409580402,
+      "espnMae": 4.658941700705548,
+      "coverage80": 0.805421463052358
+    },
+    {
+      "group": "DST",
+      "samples": 1088,
+      "modelMae": 4.747702205882348,
+      "espnMae": 4.737187499999994,
+      "coverage80": 0.7876838235294118
+    }
+  ]
+}
