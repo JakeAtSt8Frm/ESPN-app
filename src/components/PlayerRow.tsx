@@ -174,7 +174,9 @@ export function PlayerRow({
       className={`player-row${listRank === undefined ? '' : ' player-row--ranked'}`}
       aria-label={`${listRank === undefined ? '' : `Rank ${listRank}, `}${p.name}, ${p.group ?? 'unknown position'}, ${
         p.hasPlayed && !projectionFirst ? `scored ${fmt1(p.act)}` : `${useAppProjection ? 'app ' : ''}projected ${fmt1(primaryScore)}`
-      }, ${positionRankLabel}`}
+      }, ${positionRankLabel}${valueMetric
+        ? `, ${valueMetric.description}: ${valueMetric.value === null ? 'unavailable' : fmtSigned(valueMetric.value)}`
+        : ''}`}
     >
       {listRank !== undefined && (
         <span className="player-row__list-rank mono" aria-hidden="true">

@@ -17,6 +17,7 @@ import {
   summarizeTrade,
 } from '../src/lib/trade';
 import type { PriorPair } from '../src/lib/forecast';
+import { compileScoring, createScorer } from '../src/lib/scoring';
 import type { ReplacementCandidate } from '../src/lib/replacement';
 import type { Player, PositionGroup } from '../src/lib/types';
 
@@ -156,6 +157,51 @@ process.stdout.write('\nreplacement level\n');
 // ------------------------------------------------------------ trade values --
 
 process.stdout.write('\ntrade values\n');
+
+{
+  const allocate = (receptionPoints: number) => {
+    const score = createScorer(compileScoring({ rec: receptionPoints, rec_yd: 0.1, rush_yd: 0.1 }));
+    const candidates: ReplacementCandidate[] = [];
+    for (let rank = 1; rank <= 32; rank++) {
+      candidates.push({ group: 'RB', points: score({ rush_yd: 100 - rank }, 'RB') });
+      candidates.push({ group: 'WR', points: score({ rec: 8, rec_yd: 40 - rank }, 'WR') });
+    }
+    return startingSlotsByGroup(ROSTER_SLOTS, 8, candidates);
+  };
+  const halfPpr = allocate(0.5);
+  const fullPpr = allocate(1);
+  check(
+    'eight-team FLEX demand changes with half-PPR versus full-PPR scoring',
+    halfPpr.get('RB') === 24 && halfPpr.get('WR') === 16 &&
+      fullPpr.get('RB') === 16 && fullPpr.get('WR') === 24,
+  );
+}
+
+{
+  const values = buildTradeValues({
+    playersById: new Map(['starter', 'bestFree', 'nextFree'].map((pid) => [pid, player(pid, 'QB')])),
+    weeklyProjections: new Map([
+      ['starter', new Map([[1, 20]])],
+      ['bestFree', new Map([[1, 12]])],
+      ['nextFree', new Map([[1, 6]])],
+    ]),
+    rosteredIds: new Set(['starter']),
+    rosterSlots: ['QB'],
+    numTeams: 8,
+    fromWeek: 1,
+    finalWeek: 1,
+  });
+  check(
+    'waiver baseline uses the best available player without dilution by the next free agent',
+    values.waiverPerWeek.get('QB') === 12,
+    `got ${values.waiverPerWeek.get('QB')}`,
+  );
+  check(
+    'value over waivers measures the edge over that actual available baseline',
+    values.byPlayer.get('starter')?.pointsOverWaiver === 8 &&
+      values.byPlayer.get('bestFree')?.pointsOverWaiver === 0,
+  );
+}
 
 {
   const playersById = new Map<string, Player>();

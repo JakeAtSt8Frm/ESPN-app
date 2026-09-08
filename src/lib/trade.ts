@@ -552,7 +552,9 @@ export function buildTradeValues(input: BuildTradeValuesInput): TradeValueIndex 
      * lineup ends.
      */
     const free = ladder.filter((r) => !rosteredIds.has(r.pid));
-    waiverPerWeek.set(group, free.length ? rateAtDepth(free, 1) : 0);
+    // The starter cliff is smoothed; an actually available alternative is a
+    // specific player. Averaging two free agents understates that alternative.
+    waiverPerWeek.set(group, free[0]?.pointsPerWeek ?? 0);
   }
 
   // ---- Price every player against both -------------------------------------

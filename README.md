@@ -18,6 +18,10 @@ league to a browser (see [Why there is a snapshot](#why-there-is-a-snapshot)).
 | Bench | 7, plus 1 IR |
 | Season | 14 matchup periods, 6 playoff teams, seeded on total points scored |
 
+The league switcher also includes **O.J. Invitational: 8 teams, half PPR**
+(0.5 points per reception), with its own ESPN scoring table and fitted history.
+Players, Prediction Lab and Settings identify the loaded format explicitly.
+
 This is a standard format, which is exactly why the scoring engine still earns
 its place: "standard" hides a kicking ladder split four ways by distance, a D/ST
 scoring table whose 27 stat ids mean something different in slot 16 than they do
@@ -180,6 +184,18 @@ comparable across positions.
 schedule-adjusted points allowed (.60) with opportunity volume allowed (.40).
 Player strength is deliberately excluded: that describes how good the player is,
 not whether the defence provides an advantage.
+
+Starter replacement is now derived from the scored player pool: reserve each
+position's dedicated starters, then allocate FLEX seats to the best remaining
+projections. Half-PPR and full-PPR can therefore produce different RB/WR/TE
+replacement levels in the same eight-team lineup. Ties at the FLEX cutoff share
+the seats instead of favoring whichever position was processed first. Season
+value uses remaining totals; trade value uses points per projected game.
+
+The in-season schedule adjustment measures position-unit points per opponent
+game. Extra zero-point backups cannot make an opponent look tougher, and unknown
+opponents do not contaminate the comparison baseline. Availability excludes a
+known completed bye while continuing to count missed games.
 
 ### Why the second half is not a dynasty model
 
@@ -819,6 +835,17 @@ to ESPN in a position cannot hide behind the overall average. Reports are rebuil
 for each league in the snapshot deployment workflow, and the browser rejects a
 report with different scoring rules.
 
+Historical fallback distributions now fit only played outcomes and apply the
+missed-game probability once. A played zero or negative score remains in the
+fit. Boom probabilities include outcomes exactly at 120% of the projection,
+matching the historical boom definition; a target labeled "more than" remains
+strict. Versioned reports reject results from an older fitting method.
+
+The rebuilt half-PPR report covers 12,470 held-out player-weeks: model median
+MAE **4.0244** versus ESPN **4.1893**, with **79.89%** coverage for the 80% range.
+These correctness fixes leave overall measured accuracy essentially unchanged;
+they do not establish a new predictive improvement.
+
 The lab uses pregame estimates from the saved snapshot. A past-week replay uses
 today's fitted model, not an archived prediction from that week. Optimal Lineup
 keeps forecasts available during a week in progress and offers a separate Results
@@ -829,6 +856,15 @@ Back/Forward, and incremental browsing of the entire matching pool. On phones,
 the score used by the selected projection sort stays visible. The team overview
 flags missing starting slots, byes, and current injury concerns; current injuries
 are excluded when reviewing historical lineups.
+
+The player browser separates **League value** (rest-of-season points above
+starter replacement), **Value over waivers** (above the best available player's
+projected per-game rate), and **Position score** (the within-position 0–1000
+blend). The points used to sort are also shown on each row. Position filtering
+keeps the league-value ordering consistent. Historical production sorts use the
+same season as their rank chips rather than mixing current and prior results.
+Waiver comparisons use the best free player's rate without averaging in the
+runner-up; the waiver sort is unavailable when no roster assignments are saved.
 
 Any player is clickable for a detail sheet carrying, among other things, his
 whole schedule: opponent, bye, the matchup rating for his position that week,

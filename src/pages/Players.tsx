@@ -64,7 +64,9 @@ export function PlayersPage() {
     : requestedAvailability === 'all' || requestedAvailability === 'rostered'
       ? requestedAvailability : 'free';
   const requestedSort = SORT_KEYS.find((key) => key === searchParams.get('sort')) ?? 'value';
-  const sort = requestedSort === 'last4' && data.ranks.fromPrior ? 'value' : requestedSort;
+  const hasRosterAssignments = data.teams.some((team) => team.players.length > 0);
+  const sort = (requestedSort === 'last4' && data.ranks.fromPrior) ||
+    (requestedSort === 'waiverValue' && !hasRosterAssignments) ? 'value' : requestedSort;
   const query = (searchParams.get('q') ?? '').slice(0, 120);
   const requestedShown = Number(searchParams.get('shown') ?? PAGE_SIZE);
   const shown = Number.isSafeInteger(requestedShown) && requestedShown >= PAGE_SIZE
@@ -136,7 +138,8 @@ export function PlayersPage() {
        * Without it "sort by PPG" before week one is a stable sort over a column
        * of zeroes — a button that visibly does nothing.
        */
-      const prior = data.ranks.fromPrior ? data.priorProduction.get(pid) : undefined;
+      const production = data.ranks.fromPrior
+        ? data.priorProduction.get(pid) : value?.breakdown;
       const projection = sort === 'appProjection' || sort === 'espnProjection'
         ? projectedPlayerScore({
           pid,
@@ -152,19 +155,10 @@ export function PlayersPage() {
           : sort === 'waiverValue'
             ? (data.tradeValues.byPlayer.get(pid)?.pointsOverWaiver ?? 0)
             : sort === 'positionValue' ? combinedScore
-          : sort === 'ppg'
-            ? (value?.breakdown.ppg ??
-              prior?.ppg ??
-              season?.breakdown.restOfSeasonPpg ??
-              0)
-            : sort === 'total'
-              ? (value?.breakdown.total ??
-                prior?.total ??
-                season?.breakdown.restOfSeasonPoints ??
-                0)
-              : sort === 'last4'
-                ? (value?.breakdown.last4 ?? 0)
-                : (value?.breakdown.boomRate ?? prior?.boomRate ?? 0);
+              : sort === 'ppg' ? (production?.ppg ?? 0)
+                : sort === 'total' ? (production?.total ?? 0)
+                  : sort === 'last4' ? (value?.breakdown.last4 ?? 0)
+                    : (production?.boomRate ?? 0);
 
       rows.push({ pid, sortValue });
     }
@@ -257,7 +251,9 @@ export function PlayersPage() {
             }}
           >
             {SORT_KEYS.filter((key) => key !== 'last4' || !data.ranks.fromPrior).map((key) => (
-              <option key={key} value={key}>{sortLabels[key]}</option>
+              <option key={key} value={key} disabled={key === 'waiverValue' && !hasRosterAssignments}>
+                {sortLabels[key]}
+              </option>
             ))}
           </select>
         </label>
@@ -311,6 +307,13 @@ export function PlayersPage() {
             : data.ranks.fromPrior ? `PPG, Total and Boom Rate are ${data.ranks.season} finishes.`
               : 'Ranked using this league’s scoring settings.'}
       </p>
+
+      {!hasRosterAssignments && (
+        <p className="small secondary" style={{ marginBottom: 14 }}>
+          This snapshot has no roster assignments. Every player appears in the free-agent pool;
+          waiver values will become available when rosters are recorded.
+        </p>
+      )}
 
       {results.length === 0 ? (
         <div className="stack" style={{ gap: 10 }}>
