@@ -1098,6 +1098,19 @@ Monday and Thursday nights, once a day otherwise. ESPN's numbers only move when
 football is being played, and an hourly cron all week would spend most of its
 runs rewriting an identical file.
 
+Every cron asks for `:23` rather than `:00`. GitHub runs scheduled workflows on
+a best-effort queue and sheds load at the top of the hour, which is where almost
+every cron in the world lands. At `:00` this workflow was getting about three of
+every seven requested runs, each one to five hours late, and a Sunday evening
+slate could go ten hours without a refresh. The odd minute is the same frequency
+against a much shorter queue.
+
+**Reload is not a pull.** On GitHub Pages the browser cannot reach ESPN — that is
+the whole reason the snapshot exists — so Reload only re-reads the newest
+snapshot Actions has published. When it reports a stale one, the fix is to run
+the workflow, which Settings links to; a local `npm run dev` or `npm run serve`
+has a real Refresh that pulls from ESPN there and then.
+
 The production build writes a small entry page, content-hashed JavaScript and
 CSS chunks, and the ESPN JSON snapshot into `dist/`. GitHub Pages serves those
 files directly, and `HashRouter` means no server rewrite rules are required.

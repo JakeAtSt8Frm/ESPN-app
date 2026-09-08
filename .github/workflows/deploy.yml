@@ -13,6 +13,13 @@
 # and evening, twice on Monday and Thursday nights, and once a day otherwise.
 # A schedule that fires every hour all week would spend most of its runs
 # rewriting an identical file.
+#
+# The odd minute is not decoration. GitHub runs scheduled workflows on a
+# best-effort queue and sheds load at the top of the hour, which is where every
+# cron everybody writes lands. At ':00' this workflow was getting roughly three
+# of every seven runs, each one to five hours late, and a Sunday evening slate
+# would go ten hours without a refresh. Asking for ':23' is the same frequency
+# against a far shorter queue.
 name: Deploy
 
 on:
@@ -20,11 +27,11 @@ on:
     branches: [main]
   schedule:
     # Sunday 17:00-23:00 UTC (1pm-7pm ET) — the main slate, hourly.
-    - cron: '0 17-23 * * 0'
+    - cron: '23 17-23 * * 0'
     # Sunday night into Monday, and the Monday/Thursday night games.
-    - cron: '0 0-4 * * 1,2,5'
+    - cron: '23 0-4 * * 1,2,5'
     # A daily refresh the rest of the week, for waivers, trades and injuries.
-    - cron: '0 12 * * *'
+    - cron: '23 12 * * *'
   workflow_dispatch:
 
 permissions:

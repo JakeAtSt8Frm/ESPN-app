@@ -16,8 +16,26 @@
  * fresh as the last snapshot and no fresher. That is invisible unless it is
  * stated, and during games it is the difference between a live score and a
  * stale one. A local server can pull immediately; the hosted page reloads the
- * newest snapshot published by the scheduled GitHub Actions workflow.
+ * newest snapshot published by the scheduled GitHub Actions workflow, and links
+ * out to that workflow so a stale snapshot has a way forward rather than just a
+ * disclosure.
  */
+
+/**
+ * Where the hosted page sends someone who wants a pull *now*.
+ *
+ * The page cannot run one itself and should not be able to. A pull needs the
+ * ESPN cookies, and the only safe place for those is a repository secret and a
+ * Node process on a runner — putting a token in the bundle to trigger the
+ * workflow directly would hand every visitor the ability to spend the account's
+ * Actions minutes, and `fetch` cannot set `Cookie` for ESPN anyway.
+ *
+ * So it links. One click here, one click on `Run workflow` there. Deliberately
+ * a quiet link rather than a button: it only does anything for someone with
+ * write access to the repository, which is one person in an eight-team league.
+ */
+const RUN_WORKFLOW_URL =
+  'https://github.com/JakeAtSt8Frm/ESPN-app/actions/workflows/deploy.yml';
 
 import { useEffect, useRef } from 'react';
 import { useLeague } from '../data/LeagueProvider';
@@ -155,7 +173,17 @@ export function SettingsMenu({ open, onClose }: { open: boolean; onClose: () => 
           )}
           {canPull === false && refreshState.phase === 'idle' && (
             <div className="tiny muted">
-              Reloads the newest published snapshot. GitHub Actions handles the ESPN pull.
+              Reloads the newest published snapshot. GitHub Actions handles the
+              ESPN pull —{' '}
+              <a
+                href={RUN_WORKFLOW_URL}
+                target="_blank"
+                rel="noreferrer noopener"
+                title="Opens the deploy workflow on GitHub. Run workflow pulls both leagues from ESPN and republishes, then Reload here picks it up. Needs write access to the repository."
+              >
+                run one now
+              </a>
+              , then Reload once it finishes.
             </div>
           )}
         </>
