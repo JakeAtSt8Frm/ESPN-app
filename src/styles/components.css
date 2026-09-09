@@ -635,6 +635,23 @@
   .player-row--ranked .player-row__status {
     display: none;
   }
+
+  /*
+   * ...except the number the list is sorted by.
+   *
+   * Everything else on the right of the row is context, and context is the
+   * first thing a 340px row gives up. This one is not context: it is the reason
+   * the row sits where it does, and a ranked list that will not show what it
+   * ranked on is just an unexplained order. The row keeps a fourth column for
+   * it rather than letting it wrap onto a line of its own.
+   */
+  .player-row--ranked.player-row--sorted-total {
+    grid-template-columns: 3ch auto minmax(0, 1fr) auto;
+  }
+
+  .player-row--ranked .player-row__num--sorted {
+    display: block;
+  }
 }
 
 /* -------------------------------------------------------- player card --- */

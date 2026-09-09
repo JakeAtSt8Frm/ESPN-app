@@ -50,6 +50,19 @@ interface Props {
     description: string;
     signed?: boolean;
   };
+  /**
+   * A season-long total, shown in place of the actual-score column.
+   *
+   * That column is the right home for it. It is the row's rightmost number and
+   * the one the eye runs down when a list is ordered, and before a season has
+   * been played it is a column of em dashes — so a sort whose whole point is a
+   * season total has somewhere to put it that costs nothing.
+   *
+   * Unlike `valueMetric`, which sits beside the name as a chip, this replaces a
+   * column rather than adding one. A row that printed the same number twice
+   * would read as a layout fault, and the two are never both set.
+   */
+  totalMetric?: { value: number | null; description: string };
 }
 
 const RESERVE_SLOTS = new Set(['BN', 'IR']);
@@ -175,10 +188,18 @@ export function PlayerRow({
   note,
   listRank,
   valueMetric,
+  totalMetric,
 }: Props) {
   const useAppProjection = primaryProjection === 'app' && appProjection != null;
   const primaryScore = useAppProjection ? appProjection : p.proj;
   const projectionFirst = primaryProjection !== undefined;
+  /*
+   * A narrow row has room for one score, and the one it keeps is whichever the
+   * list is ordered by — the same trade `primaryProjection` makes. With a
+   * season total on the row that is the total, so this week's projection
+   * becomes the column that gives way rather than the empty actual.
+   */
+  const projectionMinor = totalMetric ? true : p.hasPlayed && !projectionFirst;
   const delta = p.hasPlayed && p.proj > 0 ? p.act - p.proj : null;
   const positionRankLabel = `${p.totalRank ? `total rank ${p.totalRank.rank}` : 'total rank unavailable'}, ${
     p.ppgRank ? `PPG rank ${p.ppgRank.rank}` : 'PPG rank unavailable'
@@ -190,11 +211,15 @@ export function PlayerRow({
     <button
       type="button"
       onClick={() => onSelect?.(p.pid)}
-      className={`player-row${listRank === undefined ? '' : ' player-row--ranked'}`}
+      className={`player-row${listRank === undefined ? '' : ' player-row--ranked'}${
+        totalMetric ? ' player-row--sorted-total' : ''
+      }`}
       aria-label={`${listRank === undefined ? '' : `Rank ${listRank}, `}${p.name}, ${p.group ?? 'unknown position'}, ${
         p.hasPlayed && !projectionFirst ? `scored ${fmt1(p.act)}` : `${useAppProjection ? 'app ' : ''}projected ${fmt1(primaryScore)}`
       }, ${positionRankLabel}${valueMetric
         ? `, ${valueMetric.description}: ${valueMetric.value === null ? 'unavailable' : fmtMetric(valueMetric)}`
+        : ''}${totalMetric
+        ? `, ${totalMetric.description}: ${totalMetric.value === null ? 'unavailable' : fmt1(totalMetric.value)}`
         : ''}`}
     >
       {listRank !== undefined && (
@@ -244,7 +269,7 @@ export function PlayerRow({
       */}
       {showProjection && (
         <span
-          className={`player-row__num mono${p.hasPlayed && !projectionFirst ? ' player-row__num--minor' : ''}`}
+          className={`player-row__num mono${projectionMinor ? ' player-row__num--minor' : ''}`}
           title={
             appProjection === null || appProjection === undefined
               ? 'ESPN projection'
@@ -267,10 +292,16 @@ export function PlayerRow({
       )}
 
       <span
-        className={`player-row__num mono bold${p.hasPlayed && !projectionFirst ? '' : ' player-row__num--minor'}`}
-        title="Actual Score"
+        className={`player-row__num mono bold${
+          totalMetric
+            ? ' player-row__num--sorted'
+            : p.hasPlayed && !projectionFirst
+              ? ''
+              : ' player-row__num--minor'
+        }`}
+        title={totalMetric ? totalMetric.description : 'Actual Score'}
       >
-        {p.hasPlayed ? fmt1(p.act) : '—'}
+        {totalMetric ? fmt1(totalMetric.value) : p.hasPlayed ? fmt1(p.act) : '—'}
       </span>
 
       <span className="player-row__status">

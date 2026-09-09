@@ -388,10 +388,14 @@ export function PlayersPage() {
                 description: sort === 'value'
                   ? 'Expected rest-of-season points above starter replacement'
                   : 'Expected rest-of-season points above the best available waiver option',
-              } : sort === 'appSeasonTotal' ? {
-                label: 'Season',
-                // A total, not a margin over anything, so it carries no sign.
-                signed: false,
+              } : undefined}
+              /*
+                On the right, in the column the actual score would occupy —
+                which before a played week is a column of dashes. It is the
+                number the list is ordered by, so it belongs where the eye runs
+                down rather than beside the name.
+              */
+              totalMetric={sort === 'appSeasonTotal' ? {
                 value: seasonTotals?.get(player.pid) ?? null,
                 description: `Total app-projected points over weeks 1–${seasonTotalWeeks}`,
               } : undefined}

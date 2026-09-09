@@ -867,8 +867,13 @@ Waiver comparisons use the best free player's rate without averaging in the
 runner-up; the waiver sort is unavailable when no roster assignments are saved.
 
 **Total Predicted App Score** is the raw counterpart to all three: every week
-from 1 to 15 added up, highest first. It is a *volume* number and it behaves
-like one — the top of the unfiltered list is entirely quarterbacks, because
+from 1 to 15 added up, highest first. It reads on the right of the row, in the
+column the actual score occupies — which before a played week is a column of em
+dashes, so the sort's own number costs nothing to show and sits where the eye
+runs down a ranked list. A narrow row keeps it and drops this week's projection
+instead, on the same principle every other sort follows: the number a list is
+ordered by is the last thing it should give up. It is a *volume* number and it
+behaves like one — the top of the unfiltered list is entirely quarterbacks, because
 quarterbacks score the most points in a season and nothing here is netted
 against what a replacement at the position would have scored. That is the
 distinction the other three sorts exist to draw, so this one is most useful
