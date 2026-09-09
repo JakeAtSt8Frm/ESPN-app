@@ -7,7 +7,13 @@ import {
   useState,
   type ReactNode,
 } from 'react';
-import { loadLeague, type LeagueData, type LoadProgress } from './league';
+import {
+  loadLeague,
+  withStatsSeason,
+  type LeagueData,
+  type LoadProgress,
+  type StatsSeason,
+} from './league';
 import { cacheClear } from './cache';
 import {
   DEFAULT_LEAGUE_KEY,
@@ -59,6 +65,17 @@ interface LeagueContextValue {
   /** Team the user has selected; defaults to the one they own. */
   selectedTeamId: number | null;
   setSelectedTeamId: (id: number) => void;
+  /**
+   * Which season's production the app reports, and whether that was chosen.
+   *
+   * `auto` — the default — hands the decision back to the rule in `league.ts`:
+   * last season's finishes until this one has four weeks of its own. Pinning
+   * `prior` is the case this exists for. Every number it moves is already in
+   * memory, so the switch is immediate and `data` is the only thing that
+   * changes; nothing reloads.
+   */
+  statsSeason: StatsSeason;
+  setStatsSeason: (choice: StatsSeason) => void;
   /**
    * Pulls a new snapshot where that is possible, and reloads either way.
    *
@@ -123,6 +140,24 @@ function savedTeamId(leagueKey: string): number | null {
   }
 }
 
+/**
+ * Where the production season is remembered.
+ *
+ * Not per league, unlike the team id. A season is an NFL season — both leagues
+ * are playing the same one, and somebody who wants last year's finishes wants
+ * them in whichever league they open next.
+ */
+const STATS_SEASON_KEY = 'espn.statsSeason';
+
+function savedStatsSeason(): StatsSeason {
+  try {
+    const raw = localStorage.getItem(STATS_SEASON_KEY);
+    return raw === 'prior' || raw === 'current' ? raw : 'auto';
+  } catch {
+    return 'auto';
+  }
+}
+
 /** Only a loopback server is allowed to expose the unauthenticated pull route. */
 function isLocalServer(): boolean {
   return (
@@ -141,6 +176,7 @@ export function LeagueProvider({ children }: { children: ReactNode }) {
   const [selectedTeamId, setTeamIdState] = useState<number | null>(() =>
     savedTeamId(savedLeagueKey()),
   );
+  const [statsSeason, setStatsSeasonState] = useState<StatsSeason>(savedStatsSeason);
   const [reloadToken, setReloadToken] = useState(0);
   const [refreshState, setRefreshState] = useState<RefreshState>({ phase: 'idle' });
   const [canPull, setCanPull] = useState<boolean | null>(() =>
@@ -203,6 +239,15 @@ export function LeagueProvider({ children }: { children: ReactNode }) {
     },
     [leagueKey],
   );
+
+  const setStatsSeason = useCallback((choice: StatsSeason) => {
+    setStatsSeasonState(choice);
+    try {
+      localStorage.setItem(STATS_SEASON_KEY, choice);
+    } catch {
+      /* non-fatal */
+    }
+  }, []);
 
   const setLeagueKey = useCallback(
     (key: string) => {
@@ -286,10 +331,25 @@ export function LeagueProvider({ children }: { children: ReactNode }) {
     [leagueKey],
   );
 
+  /*
+   * The preference applied, once, at the point every consumer reads from.
+   *
+   * Doing it here rather than in each page is what makes the switch consistent:
+   * a rank is an ordering over a pool, and a page that read the pinned index
+   * while its neighbour read the automatic one would show two orderings under
+   * one heading. `withStatsSeason` returns the same object when the preference
+   * agrees with the automatic choice, so the common case allocates nothing and
+   * leaves every downstream memo untouched.
+   */
+  const view = useMemo(
+    () => (data ? withStatsSeason(data, statsSeason) : null),
+    [data, statsSeason],
+  );
+
   const value = useMemo<LeagueContextValue>(
     () => ({
       status,
-      data,
+      data: view,
       error,
       progress,
       leagues: LEAGUES,
@@ -299,13 +359,15 @@ export function LeagueProvider({ children }: { children: ReactNode }) {
       setWeek,
       selectedTeamId,
       setSelectedTeamId,
+      statsSeason,
+      setStatsSeason,
       refresh,
       refreshState,
       canPull,
     }),
     [
       status,
-      data,
+      view,
       error,
       progress,
       leagueKey,
@@ -313,6 +375,8 @@ export function LeagueProvider({ children }: { children: ReactNode }) {
       week,
       selectedTeamId,
       setSelectedTeamId,
+      statsSeason,
+      setStatsSeason,
       refresh,
       refreshState,
       canPull,

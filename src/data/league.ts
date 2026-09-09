@@ -164,6 +164,20 @@ export interface LeagueData {
    */
   ranks: RankIndex;
   /**
+   * The two indexes `ranks` is chosen from, both kept.
+   *
+   * The automatic choice above is right almost always, and the exception is
+   * worth serving: somebody drafting, or valuing a trade in October, wants last
+   * season's finishes back after this season has taken them away. Keeping both
+   * built means Settings can pin either one without reloading the league or
+   * re-deriving anything — see `withStatsSeason`.
+   *
+   * `priorRanks` is null when the snapshot has no fitted priors to rank; that
+   * is the case the pinning UI hides itself for.
+   */
+  priorRanks: RankIndex | null;
+  currentRanks: RankIndex;
+  /**
    * Last finished season's production, per player.
    *
    * Kept alongside the ranks because the sorts on the Players page and the
@@ -182,6 +196,35 @@ export interface RankIndex {
   ppg: Map<string, RankInfo>;
   total: Map<string, RankInfo>;
   boomRate: Map<string, RankInfo>;
+}
+
+/**
+ * Which season the production numbers describe, as a preference.
+ *
+ * `auto` is the rule the app has always followed on its own: last season until
+ * this one has four weeks in it, then this one. The other two pin a season and
+ * keep it pinned. See `withStatsSeason` for why pinning is a view over already
+ * loaded data rather than a load of anything.
+ */
+export type StatsSeason = 'auto' | 'prior' | 'current';
+
+/**
+ * Applies the preference to a loaded league.
+ *
+ * Both indexes are built during the one derivation pass, so this is a choice
+ * between two objects that already exist — no fetch, no re-derivation, and no
+ * reload. It returns `data` itself whenever the preference agrees with what is
+ * already selected, which keeps the reference stable and every downstream
+ * `useMemo` keyed on `data` from recomputing for nothing.
+ *
+ * A pin that cannot be honoured falls back rather than blanking the chips: a
+ * snapshot with no fitted priors has no prior ranks to pin to.
+ */
+export function withStatsSeason(data: LeagueData, choice: StatsSeason): LeagueData {
+  const wanted =
+    choice === 'prior' ? data.priorRanks : choice === 'current' ? data.currentRanks : null;
+  if (!wanted || wanted === data.ranks) return data;
+  return { ...data, ranks: wanted };
 }
 
 export interface PlayoffFormat {
@@ -441,22 +484,26 @@ export async function loadLeague(
       ? buildPriorRanks(priorProductionSeason, priorProduction.values(), priorSeasonWeeks)
       : null;
 
+  const priorRankIndex: RankIndex | null = priorRanks
+    ? {
+        season: priorRanks.season,
+        fromPrior: true,
+        ppg: priorRanks.ppgRanks,
+        total: priorRanks.totalRanks,
+        boomRate: priorRanks.boomRateRanks,
+      }
+    : null;
+
+  const currentRankIndex: RankIndex = {
+    season: index.season,
+    fromPrior: false,
+    ppg: valueIndex.ppgRanks,
+    total: valueIndex.totalRanks,
+    boomRate: valueIndex.boomRateRanks,
+  };
+
   const ranks: RankIndex =
-    currentWeek < RANKS_MIN_WEEKS && priorRanks
-      ? {
-          season: priorRanks.season,
-          fromPrior: true,
-          ppg: priorRanks.ppgRanks,
-          total: priorRanks.totalRanks,
-          boomRate: priorRanks.boomRateRanks,
-        }
-      : {
-          season: index.season,
-          fromPrior: false,
-          ppg: valueIndex.ppgRanks,
-          total: valueIndex.totalRanks,
-          boomRate: valueIndex.boomRateRanks,
-        };
+    currentWeek < RANKS_MIN_WEEKS && priorRankIndex ? priorRankIndex : currentRankIndex;
 
   /*
    * Defence ratings need played football to rate. In week one this season has
@@ -1062,6 +1109,8 @@ export async function loadLeague(
     priorSeason: historyFile.season,
     priorLogs,
     ranks,
+    priorRanks: priorRankIndex,
+    currentRanks: currentRankIndex,
     priorProduction,
     playoff: format,
   };

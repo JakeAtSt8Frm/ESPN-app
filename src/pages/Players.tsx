@@ -65,7 +65,18 @@ export function PlayersPage() {
       ? requestedAvailability : 'free';
   const requestedSort = SORT_KEYS.find((key) => key === searchParams.get('sort')) ?? 'value';
   const hasRosterAssignments = data.teams.some((team) => team.players.length > 0);
-  const sort = (requestedSort === 'last4' && data.ranks.fromPrior) ||
+  /*
+   * "Last 4" is a measure of *this* season and has nothing to fall back on, so
+   * it is offered only once this season has scored a week.
+   *
+   * That is the condition rather than "the chips are reporting last season",
+   * which it used to be and which now says the wrong thing in both directions:
+   * Settings can pin the chips to last season in October, where the last four
+   * weeks are perfectly real, and can pin them to this one in week one, where
+   * they are four zeroes.
+   */
+  const hasPlayedWeeks = data.currentWeek > 0;
+  const sort = (requestedSort === 'last4' && !hasPlayedWeeks) ||
     (requestedSort === 'waiverValue' && !hasRosterAssignments) ? 'value' : requestedSort;
   const query = (searchParams.get('q') ?? '').slice(0, 120);
   const requestedShown = Number(searchParams.get('shown') ?? PAGE_SIZE);
@@ -250,7 +261,7 @@ export function PlayersPage() {
               if (next) updateFilters({ sort: next });
             }}
           >
-            {SORT_KEYS.filter((key) => key !== 'last4' || !data.ranks.fromPrior).map((key) => (
+            {SORT_KEYS.filter((key) => key !== 'last4' || hasPlayedWeeks).map((key) => (
               <option key={key} value={key} disabled={key === 'waiverValue' && !hasRosterAssignments}>
                 {sortLabels[key]}
               </option>

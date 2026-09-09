@@ -1043,6 +1043,20 @@ largely from the same projections everyone else is reading.
   against* is still decided in the browser, against today's universe: a player
   the snapshot no longer lists must not sit between two who are being drafted.
 
+  The four-week switch is the default rather than the whole story. **Settings →
+  Player stats** pins the season in either direction — back to the last finished
+  one, which is what somebody weighing a trade in October or reading a player who
+  has missed a month actually wants, or forward to this one before it has four
+  weeks. Both indexes are built during the same derivation pass, so choosing is a
+  swap between two objects already in memory: nothing reloads, nothing is
+  refetched, and `withStatsSeason` hands back the identical object when the
+  choice agrees with the automatic one, which keeps every downstream `useMemo`
+  from recomputing. It moves the three chips and the sorts that read them, and
+  deliberately nothing else — value, projections and the defence ratings always
+  use everything known today. Pinning last season also brings that season's four
+  numbers back into the player sheet alongside this season's profile, so the
+  ranks and the values behind them stay on the same page.
+
 ## Running it
 
 ```bash

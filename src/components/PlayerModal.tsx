@@ -352,16 +352,23 @@ export function PlayerModal({ pid, week, onClose }: Props) {
           </section>
 
           {/*
-            ---- Last season, when there is no season yet ----
+            ---- Last season ----
 
-            The profile below is built from the season in progress, so before
-            week one it renders nothing at all and the sheet opens on a player
-            with no production on it anywhere. These four are what `priors.json`
-            carries — see `seasonProduction` — and they are the four the rank
-            chips at the top of this sheet are reporting, so the reader can see
-            the numbers behind the ranks rather than only their order.
+            Shown in two cases, for one reason: the numbers behind the rank
+            chips at the top of this sheet should be readable wherever those
+            chips are reporting last season rather than this one.
+
+            The first case is the automatic one. The profile below is built from
+            the season in progress, so before week one it renders nothing at all
+            and the sheet opens on a player with no production on it anywhere.
+            These four are what `priors.json` carries — see `seasonProduction`.
+
+            The second is a pin from Settings, which keeps the chips on last
+            season after this one has games. Then both sections render, which is
+            the point: last season's finishes and this season's form, side by
+            side, each labelled with the year it describes.
           */}
-          {!value && prior && (
+          {prior && (!value || data.ranks.fromPrior) && (
             <section>
               <h3 className="section-title">{p.rankSeason ?? prior.season} season</h3>
               <div className="metric-grid">
@@ -380,8 +387,9 @@ export function PlayerModal({ pid, week, onClose }: Props) {
                 />
               </div>
               <div className="small muted" style={{ marginTop: 6 }}>
-                This season has not been played. These are last season's finishes,
-                scored under this league's settings.
+                {value
+                  ? `The rank chips above report ${p.rankSeason ?? prior.season} by choice — Settings, Player stats. Scored under this league's settings.`
+                  : `This season has not been played. These are last season's finishes, scored under this league's settings.`}
               </div>
             </section>
           )}

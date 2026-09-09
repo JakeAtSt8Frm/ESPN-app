@@ -1,7 +1,7 @@
 /**
  * Settings popover.
  *
- * Three things live here, and each exists because the snapshot cannot know it.
+ * Four things live here, and each exists because the snapshot cannot know it.
  *
  * *Which league* — one ESPN account belongs to several, each pulled into its own
  * snapshot with its own scoring and its own fitted models. Switching reloads
@@ -11,6 +11,14 @@
  * *Your team* — the snapshot is generated from one ESPN account, but anybody in
  * the league can open the page, so the app has no way to infer whose roster to
  * open on. It asks once and remembers.
+ *
+ * *Which season the production comes from* — the app switches from last
+ * season's finishes to this season's after four weeks, which is the right
+ * default and the wrong answer for a couple of real jobs. Somebody weighing a
+ * trade in October, or reading a player who has missed a month, wants last
+ * year's numbers back; by then the app has stopped offering them. Both indexes
+ * are already in memory — the pull carries three finished seasons and the fit
+ * distils them — so this is a view over loaded data, not a load.
  *
  * *Snapshot age, and doing something about it* — every number in the app is as
  * fresh as the last snapshot and no fresher. That is invisible unless it is
@@ -39,6 +47,7 @@ const RUN_WORKFLOW_URL =
 
 import { useEffect, useRef } from 'react';
 import { useLeague } from '../data/LeagueProvider';
+import type { StatsSeason } from '../data/league';
 import { fmtLeagueFormat } from '../lib/labels';
 
 /** "3 minutes ago" — coarse on purpose; precision here would be false. */
@@ -61,6 +70,8 @@ export function SettingsMenu({ open, onClose }: { open: boolean; onClose: () => 
     setLeagueKey,
     selectedTeamId,
     setSelectedTeamId,
+    statsSeason,
+    setStatsSeason,
     refresh,
     refreshState,
     canPull,
@@ -141,6 +152,55 @@ export function SettingsMenu({ open, onClose }: { open: boolean; onClose: () => 
           <>Loading {league.name}…</>
         )}
       </p>
+
+      {/*
+        Hidden rather than disabled when there is nothing to pin to. A snapshot
+        that has never been through `npm run fit:priors` has no prior ranks, and
+        a control whose only interesting option cannot be chosen is worse than
+        no control.
+      */}
+      {data?.priorRanks && (
+        <>
+          <label className="settings__field">
+            <span className="settings__label">Player stats</span>
+            <select
+              className="select"
+              value={statsSeason}
+              onChange={(e) => setStatsSeason(e.target.value as StatsSeason)}
+            >
+              <option value="auto">Automatic</option>
+              <option value="prior">{data.priorRanks.season} season</option>
+              <option value="current">{data.currentRanks.season} season</option>
+            </select>
+          </label>
+
+          <p className="settings__hint">
+            Which season PPG, Total and Boom Rate report — the three chips on
+            every player row, and the sorts that use them.{' '}
+            {statsSeason === 'auto' ? (
+              <>
+                Automatic reads {data.priorRanks.season} until{' '}
+                {data.currentRanks.season} has four weeks in it, then switches.
+                Currently showing{' '}
+                <strong>{data.ranks.season}</strong>.
+              </>
+            ) : statsSeason === 'prior' ? (
+              <>
+                Pinned to <strong>{data.priorRanks.season}</strong> — last
+                season's finished games, scored under this league's settings.
+                Value, projections and matchup ratings are unaffected; those
+                always use everything known today.
+              </>
+            ) : (
+              <>
+                Pinned to <strong>{data.currentRanks.season}</strong>. A season
+                with few games behind it ranks a thin pool, and players who have
+                not played show no rank at all.
+              </>
+            )}
+          </p>
+        </>
+      )}
 
       {data && (
         <>
