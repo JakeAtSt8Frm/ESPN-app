@@ -9,7 +9,13 @@
 import { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useLeague, useLeagueData } from '../data/LeagueProvider';
-import { appProjectionFor, projectedPlayerScore, weekForecasts } from '../data/predictions';
+import {
+  appProjectionFor,
+  projectedPlayerScore,
+  seasonAppTotals,
+  weekForecasts,
+  SEASON_TOTAL_WEEKS,
+} from '../data/predictions';
 import { enrichPlayer, rosterOwnerByPlayer } from '../data/selectors';
 import { PlayerRow } from '../components/PlayerRow';
 import { PlayerModal } from '../components/PlayerModal';
@@ -19,7 +25,8 @@ import { POSITION_GROUPS, type PositionGroup } from '../lib/types';
 
 type Availability = 'free' | 'rostered' | 'all';
 const SORT_KEYS = [
-  'value', 'waiverValue', 'positionValue', 'appProjection', 'espnProjection', 'ppg', 'total', 'last4', 'boomRate',
+  'value', 'waiverValue', 'positionValue', 'appProjection', 'espnProjection',
+  'appSeasonTotal', 'ppg', 'total', 'last4', 'boomRate',
 ] as const;
 type SortKey = (typeof SORT_KEYS)[number];
 const PAGE_SIZE = 50;
@@ -112,6 +119,18 @@ export function PlayersPage() {
   const ownerByPid = useMemo(() => rosterOwnerByPlayer(data.teams), [data]);
   const forecasts = useMemo(() => weekForecasts(data, week, 'pregame'), [data, week]);
 
+  /*
+   * Built only when the sort asks for it. It is fifteen weeks of forecasts —
+   * cheap once and memoized on the snapshot from then on, but not work to do on
+   * every visit to a page whose default sort never reads it.
+   */
+  const seasonTotals = useMemo(
+    () => (sort === 'appSeasonTotal' ? seasonAppTotals(data) : null),
+    [data, sort],
+  );
+  /** The range actually summed, which a short snapshot can cut short. */
+  const seasonTotalWeeks = Math.min(SEASON_TOTAL_WEEKS, data.maxWeek);
+
   const results = useMemo(() => {
     const needle = deferredQuery.trim().toLowerCase();
     const rows: Array<{ pid: string; sortValue: number }> = [];
@@ -166,17 +185,18 @@ export function PlayersPage() {
           : sort === 'waiverValue'
             ? (data.tradeValues.byPlayer.get(pid)?.pointsOverWaiver ?? 0)
             : sort === 'positionValue' ? combinedScore
-              : sort === 'ppg' ? (production?.ppg ?? 0)
-                : sort === 'total' ? (production?.total ?? 0)
-                  : sort === 'last4' ? (value?.breakdown.last4 ?? 0)
-                    : (production?.boomRate ?? 0);
+              : sort === 'appSeasonTotal' ? (seasonTotals?.get(pid) ?? 0)
+                : sort === 'ppg' ? (production?.ppg ?? 0)
+                  : sort === 'total' ? (production?.total ?? 0)
+                    : sort === 'last4' ? (value?.breakdown.last4 ?? 0)
+                      : (production?.boomRate ?? 0);
 
       rows.push({ pid, sortValue });
     }
 
     rows.sort((a, b) => b.sortValue - a.sortValue);
     return rows;
-  }, [data, group, availability, teamId, sort, deferredQuery, ownerByPid, week, forecasts]);
+  }, [data, group, availability, teamId, sort, deferredQuery, ownerByPid, week, forecasts, seasonTotals]);
 
   // Enrich only the visible rows while keeping the whole player pool reachable.
   const visibleResults = useMemo(
@@ -193,6 +213,7 @@ export function PlayersPage() {
     positionValue: 'Position score',
     appProjection: `App projection · Week ${week}`,
     espnProjection: `ESPN projection · Week ${week}`,
+    appSeasonTotal: `Total Predicted App Score · Weeks 1–${seasonTotalWeeks}`,
     ppg: 'PPG',
     total: 'Total',
     last4: 'Last 4',
@@ -315,6 +336,8 @@ export function PlayersPage() {
           ? `Week ${week} app projections are pregame medians, with ESPN used when an app estimate is unavailable.`
           : sort === 'espnProjection'
             ? `Week ${week} ESPN projections use this league's scoring settings.`
+          : sort === 'appSeasonTotal'
+            ? `Every week from 1 to ${seasonTotalWeeks} added up, using the app's expected points rather than the median a row displays — medians do not add. Availability is priced in, byes count as zero, and ESPN's projection stands in where the app has no fit. Comparable across positions.`
             : data.ranks.fromPrior ? `PPG, Total and Boom Rate are ${data.ranks.season} finishes.`
               : 'Ranked using this league’s scoring settings.'}
       </p>
@@ -365,6 +388,12 @@ export function PlayersPage() {
                 description: sort === 'value'
                   ? 'Expected rest-of-season points above starter replacement'
                   : 'Expected rest-of-season points above the best available waiver option',
+              } : sort === 'appSeasonTotal' ? {
+                label: 'Season',
+                // A total, not a margin over anything, so it carries no sign.
+                signed: false,
+                value: seasonTotals?.get(player.pid) ?? null,
+                description: `Total app-projected points over weeks 1–${seasonTotalWeeks}`,
               } : undefined}
             />
           ))}

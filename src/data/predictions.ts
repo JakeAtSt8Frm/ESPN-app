@@ -184,6 +184,74 @@ export function projectedPlayerScore(
 }
 
 /**
+ * The last week a season-long projected total covers.
+ *
+ * Fifteen rather than the league's own `finalWeek`, because the question this
+ * total answers is "how much football is this player expected to be worth over
+ * a season", and weeks 16 and 17 are not a season — they are one league's
+ * bracket, played by four of eight teams, and counting them would quietly
+ * reward whoever happens to have a favourable week 17 in a season nobody has
+ * reached yet. Clamped to what the snapshot actually holds.
+ */
+export const SEASON_TOTAL_WEEKS = 15;
+
+/**
+ * Every player's projected points summed across weeks 1 to `throughWeek`.
+ *
+ * **Summed from expectations, not medians.** This is the case
+ * `appExpectedFor` exists for: the median of a sum is not the sum of the
+ * medians, and stacking fifteen right-skewed weekly medians understates a
+ * player by a wide and systematic margin — each one sits below its own mean, so
+ * the error compounds in one direction rather than cancelling. Expectation adds
+ * exactly. The consequence worth stating is that this total is deliberately
+ * *not* fifteen times the number printed on a player's row: that one is a
+ * median, because a row is answering "what should I expect to see", and this is
+ * answering "what does he add up to".
+ *
+ * Every week is taken `pregame`, including weeks already played. The number is
+ * a projection over a whole season and stays one — a total that swapped in
+ * results as they arrived would be half forecast and half history, and could
+ * not be compared between a player who has played and one who has not.
+ *
+ * ESPN's projection stands in wherever the app has no fit, exactly as it does
+ * on a single week, so a position the model declines can never sum to a false
+ * zero. Availability is already priced into every term: `mean` carries the
+ * chance he does not appear, and a bye week has no projection and adds nothing.
+ *
+ * Memoized per `LeagueData` because it is fifteen week-forecasts' worth of work
+ * and the answer cannot change while a snapshot is loaded.
+ */
+export function seasonAppTotals(
+  data: LeagueData,
+  throughWeek: number = SEASON_TOTAL_WEEKS,
+): Map<string, number> {
+  const lastWeek = Math.min(throughWeek, data.maxWeek);
+
+  return memo(data, `seasonAppTotal:${lastWeek}`, () => {
+    const totals = new Map<string, number>();
+
+    for (let week = 1; week <= lastWeek; week++) {
+      const weekData = data.weeks.get(week);
+      if (!weekData) continue;
+      const forecasts = weekForecasts(data, week, 'pregame');
+
+      for (const [pid, line] of Object.entries(weekData.projections)) {
+        const group = data.playersById.get(pid)?.group ?? null;
+        const points = projectedPlayerScore(
+          { pid, group, slot: '', proj: data.score(line, group) },
+          forecasts,
+          'app',
+          'expected',
+        );
+        totals.set(pid, (totals.get(pid) ?? 0) + points);
+      }
+    }
+
+    return totals;
+  });
+}
+
+/**
  * Expected points over a submitted lineup.
  *
  * Sums expectations rather than medians — see `appExpectedFor` for why that is

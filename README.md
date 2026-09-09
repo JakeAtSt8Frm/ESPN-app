@@ -866,6 +866,34 @@ same season as their rank chips rather than mixing current and prior results.
 Waiver comparisons use the best free player's rate without averaging in the
 runner-up; the waiver sort is unavailable when no roster assignments are saved.
 
+**Total Predicted App Score** is the raw counterpart to all three: every week
+from 1 to 15 added up, highest first. It is a *volume* number and it behaves
+like one — the top of the unfiltered list is entirely quarterbacks, because
+quarterbacks score the most points in a season and nothing here is netted
+against what a replacement at the position would have scored. That is the
+distinction the other three sorts exist to draw, so this one is most useful
+filtered to a position, or read next to League value rather than instead of it.
+
+It sums **expectations, not medians**, which is the same correctness point the
+lineup totals turn on — see `appExpectedFor`. Each weekly median sits below its
+own mean, so fifteen of them stacked understate a player by a margin that
+compounds in one direction instead of cancelling; expectation adds exactly. The
+visible consequence is that the total is deliberately not fifteen times the
+number printed on the row: Brock Purdy's fifteen displayed medians come to
+231.0, and his season total reads 234.7. Every week is taken pregame, including
+weeks already played, so the number stays a projection over a whole season
+rather than half forecast and half history — otherwise a player who had played
+and one who had not could not be compared. Availability is already inside every
+term, a bye has no projection and adds nothing, and ESPN's projection stands in
+wherever the app has no fit, so a position the model declines can never sum to a
+false zero.
+
+Weeks 1–15 rather than the league's own final week: 16 and 17 are one league's
+bracket, played by half the teams, and counting them would quietly reward a
+favourable week 17 in a season nobody has reached. The range is clamped to what
+the snapshot holds and stated in the sort label and the column header, so it is
+never left to be inferred.
+
 Any player is clickable for a detail sheet carrying, among other things, his
 whole schedule: opponent, bye, the matchup rating for his position that week,
 and both projections side by side.

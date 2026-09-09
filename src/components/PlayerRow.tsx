@@ -35,11 +35,30 @@ interface Props {
   note?: string | null;
   /** The player's place in the currently filtered and sorted list. */
   listRank?: number;
-  /** The points used by a league-value sort, replacing the within-position chip. */
-  valueMetric?: { label: string; value: number | null; description: string };
+  /**
+   * The points used by a league-value sort, replacing the within-position chip.
+   *
+   * `signed` is on by default because the sorts this was built for are margins
+   * — points *above* replacement, points *above* the waiver wire — where the
+   * sign is the whole meaning. A plain total is not a margin over anything, and
+   * a leading `+` on one reads as a gain against a baseline that does not
+   * exist.
+   */
+  valueMetric?: {
+    label: string;
+    value: number | null;
+    description: string;
+    signed?: boolean;
+  };
 }
 
 const RESERVE_SLOTS = new Set(['BN', 'IR']);
+
+/** A margin keeps its sign; a total does not. See `Props.valueMetric`. */
+function fmtMetric(metric: { value: number | null; signed?: boolean }): string {
+  if (metric.value === null) return '—';
+  return metric.signed === false ? fmt1(metric.value) : fmtSigned(metric.value);
+}
 
 /** Reserve rows show football position; lineup rows retain meaningful flex slots. */
 function positionBadgeSlot(player: EnrichedPlayer): string | undefined {
@@ -175,7 +194,7 @@ export function PlayerRow({
       aria-label={`${listRank === undefined ? '' : `Rank ${listRank}, `}${p.name}, ${p.group ?? 'unknown position'}, ${
         p.hasPlayed && !projectionFirst ? `scored ${fmt1(p.act)}` : `${useAppProjection ? 'app ' : ''}projected ${fmt1(primaryScore)}`
       }, ${positionRankLabel}${valueMetric
-        ? `, ${valueMetric.description}: ${valueMetric.value === null ? 'unavailable' : fmtSigned(valueMetric.value)}`
+        ? `, ${valueMetric.description}: ${valueMetric.value === null ? 'unavailable' : fmtMetric(valueMetric)}`
         : ''}`}
     >
       {listRank !== undefined && (
@@ -193,7 +212,7 @@ export function PlayerRow({
           <span className="player-row__name">{p.name}</span>
           {valueMetric ? (
             <span className="chip chip-outline mono" title={valueMetric.description}>
-              {valueMetric.label} {valueMetric.value === null ? '—' : fmtSigned(valueMetric.value)}
+              {valueMetric.label} {valueMetric.value === null ? '—' : fmtMetric(valueMetric)}
             </span>
           ) : <ValueChip score={p.valueScore} />}
           <PositionRanks player={p} />
