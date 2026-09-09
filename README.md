@@ -1214,18 +1214,22 @@ Two secrets, however many leagues. The workflow pulls, fits and verifies each
 league in turn, reading the list from `src/lib/leagues.ts` via `npm run leagues`
 so adding a league is one edit in one file.
 
-The same workflow refreshes the snapshot on a schedule that is deliberately
-uneven — hourly through the American Sunday afternoon and evening, twice on
-Monday and Thursday nights, once a day otherwise. ESPN's numbers only move when
-football is being played, and an hourly cron all week would spend most of its
-runs rewriting an identical file.
+The same workflow refreshes the snapshot hourly from 12:23 to 04:23 UTC — 7am to
+11pm Eastern — which covers waivers, the injury reports, every kickoff in the
+week and the whole Sunday slate.
 
-Every cron asks for `:23` rather than `:00`. GitHub runs scheduled workflows on
-a best-effort queue and sheds load at the top of the hour, which is where almost
-every cron in the world lands. At `:00` this workflow was getting about three of
-every seven requested runs, each one to five hours late, and a Sunday evening
-slate could go ten hours without a refresh. The odd minute is the same frequency
-against a much shorter queue.
+That asks for far more runs than the data needs, on purpose. GitHub runs
+scheduled workflows on a best-effort queue, and this repository sees roughly half
+of what it asks for, one to four hours late: a single daily request for `12:23`
+landed at 16:42, 16:44 and 16:46 on three consecutive days, and a Sunday asking
+for eight runs got four. Asking for `:23` rather than `:00` — where almost every
+cron in the world lands — reduced the shedding and did not end it, and nothing in
+a workflow file can, because the lateness is in the scheduler. What a workflow
+file *can* do is ask often enough that shedding stops leaving holes: one request
+a day with half dropped is a snapshot routinely seven hours old, and hourly with
+half dropped is one rarely more than two. The wasted runs cost nothing — the
+repository is public, so Actions minutes are free, and a run that rewrites an
+identical file takes about a minute.
 
 **Reload is not a pull.** On GitHub Pages the browser cannot reach ESPN — that is
 the whole reason the snapshot exists — so Reload only re-reads the newest
@@ -1233,12 +1237,34 @@ snapshot Actions has published. When it reports a stale one, the fix is to run
 the workflow, which Settings links to; a local `npm run dev` or `npm run serve`
 has a real Refresh that pulls from ESPN there and then.
 
+**The app does not wait to be reloaded.** Reading the snapshot once per page load
+is right for a tab and wrong for an installed app: resuming a standalone PWA from
+the app switcher is not a page load, so React stays mounted, no effect re-runs,
+nothing refetches, and the numbers on screen are from whenever the app was last
+*opened* — routinely hours, and across a Sunday a whole slate. `useFreshSnapshot`
+re-reads `index.json` on the events that mean the viewer is back — visibility,
+focus, reconnect, and a back/forward-cache restore — and every five minutes while
+the app is on screen. A stamp that has moved triggers a reload; a stamp that has
+not costs a few hundred bytes. The reload is quiet: the page keeps rendering what
+was being read, the header's spinner turns, and the week being viewed survives,
+because somebody reading week 4 when a snapshot lands wants week 4 with the new
+numbers rather than to be thrown back to the live week.
+
 The production build writes a small entry page, content-hashed JavaScript and
 CSS chunks, and the ESPN JSON snapshot into `dist/`. GitHub Pages serves those
 files directly, and `HashRouter` means no server rewrite rules are required.
 Snapshot requests bypass the browser HTTP cache; IndexedDB is keyed by
-`generatedAt`, so Reload immediately adopts a newly deployed pull without
+`generatedAt`, so a reload immediately adopts a newly deployed pull without
 redownloading unchanged data.
+
+One thing `cache: 'no-store'` does not buy: GitHub Pages fronts the site with a
+CDN that serves `index.json` with `max-age=600`, and that edge ignores both
+`Cache-Control: no-cache` on the request and a cache-busting query string —
+measured, it returns `x-cache: HIT` with a non-zero `age` to both. So for up to
+ten minutes after a deployment the newest snapshot may still be invisible, and
+nothing the client does can shorten that. It is why the freshness poll is five
+minutes rather than thirty seconds, and why pressing Reload the instant a
+workflow finishes can legitimately return the same snapshot.
 
 ## A note on the colour scale
 

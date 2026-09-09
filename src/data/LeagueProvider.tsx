@@ -4,6 +4,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from 'react';
@@ -15,6 +16,7 @@ import {
   type StatsSeason,
 } from './league';
 import { cacheClear } from './cache';
+import { useFreshSnapshot } from './useFreshSnapshot';
 import {
   DEFAULT_LEAGUE_KEY,
   LEAGUES,
@@ -183,11 +185,29 @@ export function LeagueProvider({ children }: { children: ReactNode }) {
     isLocalServer() ? null : false,
   );
 
+  /**
+   * The league whose data is currently on screen.
+   *
+   * Separates the two reasons the load effect runs. A league switch has nothing
+   * to show and must show the loading screen; a reload of the league already on
+   * screen has something perfectly readable to show, and should leave it there.
+   */
+  const onScreenKey = useRef<string | null>(null);
+
   useEffect(() => {
     const controller = new AbortController();
     let cancelled = false;
 
-    setStatus('loading');
+    /*
+     * A reload over data already on screen stays quiet: the page goes on
+     * rendering what the viewer was reading and the header's spinner turns,
+     * rather than a full-page `Loading league…` replacing week 4 because a new
+     * snapshot happened to land while they were reading it. A switch has no
+     * such option — there is nothing of the new league to show yet.
+     */
+    const quiet = onScreenKey.current === leagueKey;
+    if (quiet) setRefreshState({ phase: 'reloading' });
+    else setStatus('loading');
     setError(null);
     setProgress(null);
 
@@ -200,8 +220,16 @@ export function LeagueProvider({ children }: { children: ReactNode }) {
     )
       .then((result) => {
         if (cancelled) return;
+        onScreenKey.current = leagueKey;
         setData(result);
-        setWeek(result.liveWeek);
+        /*
+         * The viewed week survives a reload but not a switch. Somebody reading
+         * week 4 when a new snapshot lands wants week 4 with the new numbers in
+         * it, not to be thrown back to the live week because a file changed
+         * underneath them. The other league, by contrast, has its own idea of
+         * which week is live and may not carry week 4 at all.
+         */
+        setWeek((current) => (quiet && result.weeks.has(current) ? current : result.liveWeek));
         /*
          * Read from storage rather than kept from the previous render. On a
          * plain reload the two agree; on a league switch they do not, and
@@ -215,10 +243,23 @@ export function LeagueProvider({ children }: { children: ReactNode }) {
             : (result.teams[0]?.teamId ?? null),
         );
         setStatus('ready');
+        setRefreshState({ phase: 'idle' });
       })
       .catch((err: unknown) => {
         if (cancelled || controller.signal.aborted) return;
-        setError(err instanceof Error ? err.message : 'Failed to load league data');
+        const message = err instanceof Error ? err.message : 'Failed to load league data';
+        /*
+         * A failed quiet reload keeps the data it failed to replace. What is on
+         * screen is still a true snapshot, just an older one, and tearing a
+         * readable page down into an error screen because a background check
+         * could not reach the network is the worse answer — so it is reported
+         * where Settings already reports a failed refresh.
+         */
+        if (quiet) {
+          setRefreshState({ phase: 'error', message });
+          return;
+        }
+        setError(message);
         setStatus('error');
       });
 
@@ -227,6 +268,21 @@ export function LeagueProvider({ children }: { children: ReactNode }) {
       controller.abort();
     };
   }, [leagueKey, reloadToken]);
+
+  /*
+   * Freshness after the load, which is the only moment the app used to ask —
+   * see `useFreshSnapshot` for why that is the wrong and only moment for an
+   * app that is opened rather than navigated to.
+   */
+  useFreshSnapshot({
+    leagueKey,
+    stamp: data?.generatedAt ?? null,
+    busy:
+      status === 'loading' ||
+      refreshState.phase === 'pulling' ||
+      refreshState.phase === 'reloading',
+    onNewer: () => setReloadToken((n) => n + 1),
+  });
 
   const setSelectedTeamId = useCallback(
     (id: number) => {
@@ -272,12 +328,21 @@ export function LeagueProvider({ children }: { children: ReactNode }) {
 
   const refresh = useCallback(
     (options?: { refit?: boolean }) => {
+      /*
+       * Emptying the cache is belt and braces — a new snapshot carries a new
+       * stamp, so its payloads are a miss anyway — but it is also the only thing
+       * that forces a genuine refetch when the stamp has *not* moved, which is
+       * what somebody pressing this button while doubting the screen is asking
+       * for.
+       *
+       * The busy state is handed to the load effect rather than cleared here.
+       * Clearing it on `cacheClear` resolving, as this did, stopped the spinner
+       * the moment the cache was emptied with the whole refetch still ahead of
+       * it.
+       */
       const reload = () => {
         setRefreshState({ phase: 'reloading' });
-        void cacheClear().then(() => {
-          setRefreshState({ phase: 'idle' });
-          setReloadToken((n) => n + 1);
-        });
+        void cacheClear().then(() => setReloadToken((n) => n + 1));
       };
 
       // GitHub Pages has no server route. Its Actions workflow publishes the

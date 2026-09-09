@@ -8,30 +8,38 @@
 # the same ESPN account belongs to, and ESPN authorises the account rather than
 # the league. A league on a different account would need its own secrets.
 #
-# The cron is deliberately uneven. ESPN's numbers only move when football is
-# being played, so this refreshes hourly through the American Sunday afternoon
-# and evening, twice on Monday and Thursday nights, and once a day otherwise.
-# A schedule that fires every hour all week would spend most of its runs
-# rewriting an identical file.
+# The cron asks for far more runs than the data needs, and that is the point.
 #
-# The odd minute is not decoration. GitHub runs scheduled workflows on a
-# best-effort queue and sheds load at the top of the hour, which is where every
-# cron everybody writes lands. At ':00' this workflow was getting roughly three
-# of every seven runs, each one to five hours late, and a Sunday evening slate
-# would go ten hours without a refresh. Asking for ':23' is the same frequency
-# against a far shorter queue.
+# GitHub runs scheduled workflows on a best-effort queue. On this repository it
+# sheds roughly half of what is asked for and delivers the rest one to four hours
+# late: measured across a week, the single daily request for 12:23 landed at
+# 16:42, 16:44 and 16:46 on three consecutive days, and a Sunday asking for eight
+# runs got four. Moving off ':00' — where every cron anybody writes lands — took
+# the shedding down but did not end it, and nothing in a workflow file can,
+# because the lateness is in the scheduler and not here.
+#
+# What a workflow file can do is ask often enough that shedding stops leaving
+# holes. One request a day with half of them dropped is a published snapshot
+# routinely seven hours old, which is what the app was reporting. Hourly through
+# the waking day with half of them dropped is one rarely more than two hours old.
+#
+# The wasted runs cost nothing. The repository is public, so Actions minutes are
+# free, and a run that pulls ESPN only to rewrite an identical file takes about a
+# minute — which is the right trade against the app being a slate out of date.
+#
+# 12:23-04:23 UTC is 7am to 11pm Eastern: waivers, the injury reports, every
+# kickoff in the week and the whole Sunday slate. The hours it leaves out are the
+# ones where ESPN's numbers genuinely do not move.
 name: Deploy
 
 on:
   push:
     branches: [main]
   schedule:
-    # Sunday 17:00-23:00 UTC (1pm-7pm ET) — the main slate, hourly.
-    - cron: '23 17-23 * * 0'
-    # Sunday night into Monday, and the Monday/Thursday night games.
-    - cron: '23 0-4 * * 1,2,5'
-    # A daily refresh the rest of the week, for waivers, trades and injuries.
-    - cron: '23 12 * * *'
+    # The American day, hourly.
+    - cron: '23 12-23 * * *'
+    # ...and on through the night games, which run past midnight UTC.
+    - cron: '23 0-4 * * *'
   workflow_dispatch:
 
 permissions:
