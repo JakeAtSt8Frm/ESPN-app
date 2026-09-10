@@ -16,8 +16,8 @@ export type ScoringSettings = Record<string, number>;
 /**
  * Position groups used for ranking and comparison.
  *
- * Every valuation in the app is a percentile *within* one of these, which is
- * what makes a kicker's score and a receiver's score readable on one scale.
+ * Positional ratings compare players within a group. Headline value compares
+ * their projected advantages over each group's replacement level.
  */
 export type PositionGroup = 'QB' | 'RB' | 'WR' | 'TE' | 'K' | 'DST';
 

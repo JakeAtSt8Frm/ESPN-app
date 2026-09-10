@@ -1,15 +1,9 @@
 /**
- * Trade value — the one place in this app where players are compared *across*
- * positions.
+ * Cross-position player value, shared by trades and the headline Value Score.
  *
- * Everything else here is deliberately within-position. The headline Value
- * Score is an average of percentiles inside a player's own group, which is the
- * right shape for "is he a good tight end" and the wrong shape for every
- * question a trade asks. On the shipped snapshot the top tight end scores 980
- * and the top kicker 971, against 978 for the best running back in the league —
- * a currency in which a $5 kicker and a $70 running back are the same asset.
- * Summing that across a two-for-one would not be approximately right, it would
- * be meaningless.
+ * Positional ratings answer "is he a good tight end" but discard the size of
+ * his advantage over replacement. These points preserve that advantage, and
+ * the headline scales the same value to 0–1000 across the entire league.
  *
  * So trades are priced in **points**, and only in points.
  *
@@ -139,7 +133,7 @@ import type { PriorPair } from './forecast';
 import { computeOptimalLineup, starterSlots, type LineupCandidate } from './optimal';
 import { startingDepthByGroup as startingSlotsByGroup } from './replacement';
 import { round, stdev } from './stats';
-import { POSITION_GROUPS, type Player, type PositionGroup } from './types';
+import { POSITION_GROUPS, SLOT_ELIGIBILITY, type Player, type PositionGroup } from './types';
 
 export { startingDepthByGroup as startingSlotsByGroup } from './replacement';
 
@@ -473,7 +467,7 @@ export function buildTradeValues(input: BuildTradeValuesInput): TradeValueIndex 
     if (weekly) {
       for (let week = fromWeek; week <= finalWeek; week++) {
         const value = weekly.get(week);
-        if (value === undefined) continue;
+        if (value === undefined || !Number.isFinite(value)) continue;
         weeks.set(week, value);
         sum += value;
       }
@@ -496,6 +490,7 @@ export function buildTradeValues(input: BuildTradeValuesInput): TradeValueIndex 
     rows.filter((row) => row.weeksProjected > 0)
       .map((row) => ({ group: row.group, points: row.pointsPerWeek })),
   );
+  const eligibleGroups = new Set(rosterSlots.flatMap((slot) => SLOT_ELIGIBILITY[slot.toUpperCase()] ?? []));
 
   /*
    * How much of a start decision each position actually offers, measured off
@@ -557,6 +552,20 @@ export function buildTradeValues(input: BuildTradeValuesInput): TradeValueIndex 
     waiverPerWeek.set(group, free[0]?.pointsPerWeek ?? 0);
   }
 
+  // In FLEX-only formats a group can have no allocated starters yet still be
+  // eligible. Its alternative is the marginal FLEX starter at another position,
+  // not the weakest player in its own pool and not an automatic zero value.
+  const dedicated = startingSlotsByGroup(rosterSlots.filter((slot) => slot.toUpperCase() !== 'FLEX'), numTeams, []);
+  const flexLevels = SLOT_ELIGIBILITY.FLEX
+    .filter((group) => (slots.get(group) ?? 0) > (dedicated.get(group) ?? 0))
+    .map((group) => replacementPerWeek.get(group) ?? 0);
+  if (flexLevels.length > 0) {
+    const flexLevel = Math.min(...flexLevels);
+    for (const group of SLOT_ELIGIBILITY.FLEX) {
+      if ((slots.get(group) ?? 0) === 0) replacementPerWeek.set(group, flexLevel);
+    }
+  }
+
   // ---- Price every player against both -------------------------------------
   const byPlayer = new Map<string, TradeValue>();
   let peak = 0;
@@ -573,15 +582,19 @@ export function buildTradeValues(input: BuildTradeValuesInput): TradeValueIndex 
       aboveWaiver += expectedExcess(value, sd, waiver);
     }
 
-    const points = above * row.availability;
+    // A player cannot add lineup value in a position this league never starts.
+    const canStart = numTeams > 0 && eligibleGroups.has(row.group);
+    const points = canStart ? above * row.availability : 0;
     if (points > peak) peak = points;
 
     const player = playersById.get(row.pid);
     byPlayer.set(row.pid, {
       pid: row.pid,
       group: row.group,
-      points: round(points, 1),
-      pointsOverWaiver: round(aboveWaiver * row.availability, 1),
+      // Keep full precision until normalization; rounding first can turn a
+      // small positive leader into zero or push its index above 100.
+      points,
+      pointsOverWaiver: canStart ? round(aboveWaiver * row.availability, 1) : 0,
       index: 0,
       projectedPoints: round(row.projectedPoints, 1),
       weeksProjected: row.weeksProjected,
@@ -607,6 +620,7 @@ export function buildTradeValues(input: BuildTradeValuesInput): TradeValueIndex 
    */
   for (const value of byPlayer.values()) {
     value.index = peak > 0 ? round((value.points / peak) * 100, 1) : 0;
+    value.points = round(value.points, 1);
   }
 
   return {

@@ -164,8 +164,14 @@ jobs:
           npm run verify:lineup-alerts
           npm run verify:predictions
           npm run verify:power
-          npm run verify:trade
           npm run verify:season
+
+      # Value normalization must also hold when publishing committed snapshots
+      # without ESPN credentials. This exercises both leagues through the loader.
+      - name: Verify player values across positions
+        run: |
+          npm run verify:trade
+          npm run verify:values
 
       - run: npm run build
 

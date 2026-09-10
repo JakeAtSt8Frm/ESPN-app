@@ -88,7 +88,7 @@ export function PlayersPage() {
   const query = (searchParams.get('q') ?? '').slice(0, 120);
   const requestedShown = Number(searchParams.get('shown') ?? PAGE_SIZE);
   const shown = Number.isSafeInteger(requestedShown) && requestedShown >= PAGE_SIZE
-    ? Math.min(requestedShown, Math.max(PAGE_SIZE, data.combinedScores.size)) : PAGE_SIZE;
+    ? Math.min(requestedShown, Math.max(PAGE_SIZE, data.playersById.size)) : PAGE_SIZE;
   const filters: PlayerFilters = { group, availability, teamId, sort, query, shown };
 
   function updateFilters(updates: Partial<PlayerFilters>, replace = false) {
@@ -135,11 +135,9 @@ export function PlayersPage() {
     const needle = deferredQuery.trim().toLowerCase();
     const rows: Array<{ pid: string; sortValue: number }> = [];
 
-    for (const [pid, combinedScore] of data.combinedScores) {
-      const player = data.playersById.get(pid);
+    for (const [pid, player] of data.playersById) {
       const value = data.valueIndex.byPlayer.get(pid) ?? null;
-      const season = data.seasonValueIndex.byPlayer.get(pid) ?? null;
-      const playerGroup = value?.group ?? season?.group ?? null;
+      const playerGroup = player.group;
       if (!playerGroup || (group !== 'ALL' && playerGroup !== group)) continue;
 
       const owner = ownerByPid.get(pid) ?? null;
@@ -155,12 +153,8 @@ export function PlayersPage() {
       }
 
       /*
-       * Sorting by value across positions has to use points, not the Value
-       * Score — that one is a percentile inside a position group, so an "All
-       * positions" list ordered by it is led by whoever is most dominant
-       * *relative to his own pool*, which is usually a kicker. Keep the same
-       * points-based ordering when narrowing to a position; the position score
-       * is a separate sort with a different purpose.
+       * Order on the shared score. Rounded point totals can tie even when
+       * normalized values differ. Filters must never change the scale's pool.
        */
       /*
        * The three production sorts fall back to last season, on the same switch
@@ -181,10 +175,10 @@ export function PlayersPage() {
 
       const sortValue =
         projection !== null ? projection : sort === 'value'
-          ? (data.tradeValues.byPlayer.get(pid)?.points ?? 0)
+          ? (data.combinedScores.get(pid) ?? -1)
           : sort === 'waiverValue'
             ? (data.tradeValues.byPlayer.get(pid)?.pointsOverWaiver ?? 0)
-            : sort === 'positionValue' ? combinedScore
+            : sort === 'positionValue' ? (data.positionScores.get(pid) ?? -1)
               : sort === 'appSeasonTotal' ? (seasonTotals?.get(pid) ?? 0)
                 : sort === 'ppg' ? (production?.ppg ?? 0)
                   : sort === 'total' ? (production?.total ?? 0)
@@ -327,11 +321,11 @@ export function PlayersPage() {
 
       <p className="small muted" style={{ marginBottom: 14 }}>
         {sort === 'value'
-          ? `Expected rest-of-season points above starter replacement in this ${data.league.size}-team league, through Week ${data.playoff.finalWeek}. Comparable across positions.`
+          ? `Value Score (0–1000) compares projected value above replacement across all positions in this ${data.league.size}-team league, through Week ${data.playoff.finalWeek}. The league leader is 1000; 500 means half that modeled value. Filtering keeps the same scale.`
           : sort === 'waiverValue'
             ? `Expected rest-of-season points above the best available waiver option at each position, through Week ${data.playoff.finalWeek}. This measures player value; roster fit determines which pickups help your team.`
           : sort === 'positionValue'
-            ? 'Value Score (0–1000) compares players within their own position. It blends current production with rest-of-season outlook.'
+            ? 'Position score (0–1000) blends current production with rest-of-season outlook within each position. It describes standing within that position; the headline Value Score measures value across positions.'
           : sort === 'appProjection'
           ? `Week ${week} app projections are pregame medians, with ESPN used when an app estimate is unavailable.`
           : sort === 'espnProjection'
@@ -380,14 +374,16 @@ export function PlayersPage() {
               primaryProjection={sort === 'appProjection' ? 'app' : sort === 'espnProjection' ? 'espn' : undefined}
               onSelect={setOpenPid}
               note={owner}
-              valueMetric={sort === 'value' || sort === 'waiverValue' ? {
-                label: sort === 'value' ? 'Value' : 'Waiver',
-                value: data.tradeValues.byPlayer.get(player.pid)?.[
-                  sort === 'value' ? 'points' : 'pointsOverWaiver'
-                ] ?? null,
-                description: sort === 'value'
-                  ? 'Expected rest-of-season points above starter replacement'
-                  : 'Expected rest-of-season points above the best available waiver option',
+              valueMetric={sort === 'waiverValue' ? {
+                label: 'Waiver',
+                value: data.tradeValues.byPlayer.get(player.pid)?.unprojected ? null
+                  : data.tradeValues.byPlayer.get(player.pid)?.pointsOverWaiver ?? null,
+                description: 'Expected rest-of-season points above the best available waiver option',
+              } : sort === 'positionValue' ? {
+                label: 'Position',
+                value: data.positionScores.get(player.pid) ?? null,
+                description: 'Rating within this position, out of 1000',
+                signed: false,
               } : undefined}
               /*
                 On the right, in the column the actual score would occupy —

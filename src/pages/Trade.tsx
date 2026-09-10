@@ -1,12 +1,8 @@
 /**
- * Trade — the only page that compares players across positions.
+ * Trade — cross-position value and the effect on each starting lineup.
  *
- * It deliberately does not show the headline Value Score anywhere it could be
- * added up. That number is a percentile inside a position group: the app's top
- * tight end reads 980 and its top kicker 971 against 978 for the best running
- * back in the league, so summing it across a two-for-one would price a $5
- * kicker as most of a $70 running back. Everything here is in points instead.
- * See `lib/trade.ts` for how those points are built.
+ * Trades add the points behind the headline Value Score, preserving precision
+ * through multi-player deals. See `lib/trade.ts` for how those points are built.
  *
  * The page answers two different questions and keeps them apart, because they
  * genuinely disagree and a manager needs both:

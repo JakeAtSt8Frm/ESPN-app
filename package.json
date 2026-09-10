@@ -23,6 +23,7 @@
     "report:forecast": "tsx scripts/report-forecast.ts",
     "verify:power": "tsx scripts/verify-power.ts",
     "verify:season": "tsx scripts/verify-season-value.ts",
+    "verify:values": "tsx scripts/verify-player-values.ts",
     "research:forecast": "tsx scripts/research-forecast.ts",
     "research:boom-bust": "tsx scripts/research-boom-bust.ts",
     "research:matchup": "tsx scripts/research-matchup.ts",

@@ -54,8 +54,8 @@ export function ValueChip({ score }: { score: number | null }) {
     <span
       className="chip mono"
       style={{ background, color: ink }}
-      title={`Value Score ${score ?? '—'} of 1000 — current season only`}
-      aria-label={`Value Score ${score ?? 'unavailable'} of 1000, current season only`}
+      title={score === null ? 'Value unavailable — no remaining projection' : `Value Score ${score} of 1000 — projected value above replacement across all positions; league leader = 1000`}
+      aria-label={`Value Score ${score ?? 'unavailable'} of 1000, across all positions`}
     >
       {score === null ? '—' : score}
     </span>

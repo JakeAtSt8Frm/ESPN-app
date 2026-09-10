@@ -19,7 +19,7 @@ import {
 import type { PriorPair } from '../src/lib/forecast';
 import { compileScoring, createScorer } from '../src/lib/scoring';
 import type { ReplacementCandidate } from '../src/lib/replacement';
-import type { Player, PositionGroup } from '../src/lib/types';
+import { POSITION_GROUPS, type Player, type PositionGroup } from '../src/lib/types';
 
 let failures = 0;
 
@@ -581,6 +581,76 @@ process.stdout.write('\nroster impact\n');
     'a null trade moves nothing',
     near(rosterImpact({ ...base, teamId: 1, playerIds: roster, sends: [], receives: [] }).delta, 0),
   );
+}
+
+process.stdout.write('\ncross-position normalization\n');
+{
+  const playersById = new Map<string, Player>();
+  const weeklyProjections = new Map<string, Map<number, number>>();
+  for (const [index, group] of POSITION_GROUPS.entries()) {
+    // Very different scoring levels, identical advantages above replacement.
+    const baseline = 30 - index * 4;
+    for (const [rank, edge] of [2, 0, 0, 0, -2].entries()) {
+      const pid = `${group}${rank}`;
+      playersById.set(pid, player(pid, group));
+      weeklyProjections.set(pid, new Map([[1, baseline + edge], [2, baseline + edge]]));
+    }
+  }
+  const input = {
+    playersById, weeklyProjections, rosteredIds: new Set<string>(),
+    rosterSlots: ['QB', 'RB', 'WR', 'TE', 'K', 'D/ST'], numTeams: 3, fromWeek: 1, finalWeek: 2,
+  };
+  const equal = buildTradeValues(input);
+  check('equal replacement advantages have equal value across all six positions',
+    POSITION_GROUPS.every((group) => equal.byPlayer.get(`${group}0`)?.points === 4 &&
+      equal.byPlayer.get(`${group}0`)?.index === 100));
+
+  weeklyProjections.set('RB0', new Map([[1, 30], [2, 30]]));
+  const doubled = buildTradeValues(input);
+  check('twice the replacement advantage earns twice the normalized value',
+    doubled.byPlayer.get('RB0')?.index === 100 &&
+    POSITION_GROUPS.filter((group) => group !== 'RB').every((group) =>
+      doubled.byPlayer.get(`${group}0`)?.index === 50));
+  weeklyProjections.set('RB0', new Map([[1, 30]]));
+  check('a bye removes just its own value without a replacement penalty',
+    buildTradeValues(input).byPlayer.get('RB0')?.points === 4);
+
+  playersById.set('unknown', player('unknown', 'WR'));
+  const padded = buildTradeValues(input);
+  check('unprojected players cannot change the scale or replacement level',
+    padded.byPlayer.get('unknown')?.unprojected === true &&
+    padded.replacementPerWeek.get('WR') === equal.replacementPerWeek.get('WR') &&
+    padded.byPlayer.get('WR0')?.index === 100);
+  weeklyProjections.set('unknown', new Map([[1, NaN], [2, Infinity]]));
+  const invalid = buildTradeValues(input);
+  check('nonfinite projections are missing evidence, never a poisoned position pool',
+    invalid.byPlayer.get('unknown')?.unprojected === true &&
+    invalid.byPlayer.get('WR0')?.index === 100);
+  weeklyProjections.delete('unknown');
+
+  const noKicker = buildTradeValues({ ...input, rosterSlots: ['QB', 'RB', 'WR', 'TE', 'D/ST'] });
+  check('a position with no eligible starting slot has no lineup value',
+    noKicker.byPlayer.get('K0')?.points === 0 && noKicker.byPlayer.get('K0')?.index === 0);
+  const flexOnly = buildTradeValues({
+    ...input, rosterSlots: ['FLEX'],
+    rosteredIds: new Set([...playersById.keys()].filter((pid) => pid.startsWith('WR'))),
+  });
+  check('FLEX eligibility retains bench value even without a dedicated or allocated seat',
+    !flexOnly.startingDepthByGroup.has('WR') &&
+    flexOnly.replacementPerWeek.get('WR') === flexOnly.replacementPerWeek.get('RB') &&
+    (flexOnly.byPlayer.get('WR0')?.points ?? 0) > 0 &&
+    flexOnly.byPlayer.get('K0')?.points === 0);
+
+  for (const [pid, weeks] of weeklyProjections) {
+    weeklyProjections.set(pid, new Map([...weeks].map(([week, points]) => [week, points * 0.003])));
+  }
+  const tiny = buildTradeValues(input);
+  check('rounding small point margins cannot erase or overflow the normalized leader',
+    Math.max(...[...tiny.byPlayer.values()].map((value) => value.index)) === 100 &&
+    POSITION_GROUPS.every((group) => tiny.byPlayer.get(`${group}0`)?.index === 100));
+  const ended = buildTradeValues({ ...input, fromWeek: 3 });
+  check('an ended season has no fabricated positive value',
+    [...ended.byPlayer.values()].every((value) => value.unprojected && value.points === 0 && value.index === 0));
 }
 
 process.stdout.write(failures ? `\n${failures} check(s) failed\n` : '\nall checks passed\n');

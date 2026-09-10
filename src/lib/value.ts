@@ -1,11 +1,11 @@
 /**
- * Player Value Score (0–1000).
+ * Within-position production rating (0–1000).
  *
  * A season-long, in-season valuation built entirely from scored production.
  * The model blends 10 normalised signals, every one of which is a percentile
  * *within the player's own position group* — a 900-value kicker and a
- * 900-value receiver are both "top of their pool", not comparable in raw
- * points.
+ * 900-value receiver are both "top of their pool". This is positional context;
+ * the headline Value Score comes from points above replacement in `trade.ts`.
  *
  * Design rules carried over from the original model, and worth preserving:
  *  - On-field production and recency dominate.

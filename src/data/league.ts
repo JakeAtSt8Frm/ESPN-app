@@ -114,17 +114,17 @@ export interface LeagueData {
   valueIndex: ValueIndex;
   seasonValueIndex: SeasonValueIndex;
   /**
-   * The single headline Value Score: the average of the in-season score and the
-   * rest-of-season score, both percentiled within position so the two sit on
-   * the same footing. A player carrying only one of the two carries that one.
+   * Headline value on one proportional 0–1000 scale across all positions.
+   * The league leader is 1000. No remaining projection means no score.
    */
   combinedScores: Map<string, number>;
+  /** Average of the two within-position ratings, retained as positional context. */
+  positionScores: Map<string, number>;
   /**
    * Cross-positional trade currency, in projected points over replacement.
    *
-   * Deliberately separate from `combinedScores`: that one is a percentile
-   * within a position group and cannot be added up or compared across
-   * positions, which is everything a trade needs. See `lib/trade.ts`.
+   * The underlying points behind `combinedScores`. Trades add these points
+   * rather than rounded display scores. See `lib/trade.ts`.
    */
   tradeValues: TradeValueIndex;
   /**
@@ -1057,19 +1057,29 @@ export async function loadLeague(
     driftByGroup,
   });
 
-  // The one headline number.
+  // One denominator for the entire league, before any UI filtering. Never
+  // substitute a positional percentile when there is no remaining projection.
   const combinedScores = new Map<string, number>();
+  for (const [pid, value] of tradeValues.byPlayer) {
+    if (!value.unprojected) combinedScores.set(pid, Math.round(value.index * 10));
+  }
+
+  const positionScores = new Map<string, number>();
   const scoredPids = new Set<string>([
     ...valueIndex.byPlayer.keys(),
     ...seasonValueIndex.byPlayer.keys(),
   ]);
   for (const pid of scoredPids) {
     const inSeason = valueIndex.byPlayer.get(pid)?.score ?? null;
-    const rest = seasonValueIndex.byPlayer.get(pid)?.score ?? null;
+    const seasonValue = seasonValueIndex.byPlayer.get(pid);
+    // Neutral priors are useful inside the model, but are not a player rating
+    // when neither production nor a remaining projection supports them.
+    if (inSeason === null && seasonValue?.breakdown.restOfSeasonPoints == null) continue;
+    const rest = seasonValue?.score ?? null;
     if (inSeason !== null && rest !== null) {
-      combinedScores.set(pid, Math.round((inSeason + rest) / 2));
-    } else if (inSeason !== null) combinedScores.set(pid, inSeason);
-    else if (rest !== null) combinedScores.set(pid, rest);
+      positionScores.set(pid, Math.round((inSeason + rest) / 2));
+    } else if (inSeason !== null) positionScores.set(pid, inSeason);
+    else if (rest !== null) positionScores.set(pid, rest);
   }
 
   report('Ready', 4, 4);
@@ -1098,6 +1108,7 @@ export async function loadLeague(
     valueIndex,
     seasonValueIndex,
     combinedScores,
+    positionScores,
     tradeValues,
     ownProjections,
     projectionModel,

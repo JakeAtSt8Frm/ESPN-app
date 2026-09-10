@@ -1,5 +1,5 @@
 /**
- * Season Value — the forward-looking half of the headline Value Score.
+ * Season Value — the forward-looking half of the within-position rating.
  *
  * The app this one is modelled on runs a **dynasty** league, and its second
  * valuation asks "what is this player worth to hold for years": multi-year
@@ -18,7 +18,9 @@
  *
  * Like the in-season half, every leg is a percentile *within the player's own
  * position group*, which is what lets the two halves be averaged and read the
- * same way: "top of his own pool", not comparable across positions.
+ * same way: "top of his own pool", not comparable across positions. These two
+ * ratings form the Position score; the headline Value Score uses the shared
+ * cross-position points model in `trade.ts` instead.
  */
 
 import { clamp01, percentileRanks, round } from './stats';

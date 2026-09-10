@@ -36,7 +36,7 @@ interface Props {
   /** The player's place in the currently filtered and sorted list. */
   listRank?: number;
   /**
-   * The points used by a league-value sort, replacing the within-position chip.
+   * An alternate sort metric, replacing the headline Value Score chip.
    *
    * `signed` is on by default because the sorts this was built for are margins
    * — points *above* replacement, points *above* the waiver wire — where the

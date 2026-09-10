@@ -119,6 +119,7 @@ export function PlayerModal({ pid, week, onClose }: Props) {
     // one has been played. See `LeagueData.priorProduction`.
     const prior = data.priorProduction.get(pid) ?? null;
     const season = data.seasonValueIndex.byPlayer.get(pid) ?? null;
+    const leagueValue = data.tradeValues.byPlayer.get(pid) ?? null;
     const weekly = data.valueIndex.weeklyScores.get(pid) ?? [];
     const matchupIndex = data.pregameMatchupIndexes.get(week) ?? data.matchupIndex;
     const matchup = matchupIndex.get(player.group, player.opponent);
@@ -192,6 +193,7 @@ export function PlayerModal({ pid, week, onClose }: Props) {
       value,
       prior,
       season,
+      leagueValue,
       weekly,
       matchup,
       chart,
@@ -202,7 +204,7 @@ export function PlayerModal({ pid, week, onClose }: Props) {
 
   if (!pid || !detail) return null;
 
-  const { player: p, value, prior, season, weekly, matchup, chart, schedule, forecast } = detail;
+  const { player: p, value, prior, season, leagueValue, weekly, matchup, chart, schedule, forecast } = detail;
 
   const played = weekly.length;
   const beats = weekly.filter((w) => w.projected !== null && w.actual > w.projected).length;
@@ -270,6 +272,31 @@ export function PlayerModal({ pid, week, onClose }: Props) {
         </header>
 
         <div className="sheet__body">
+          <section>
+            <h3 className="section-title">League value · {p.valueScore ?? 'Unavailable'}</h3>
+            {leagueValue && !leagueValue.unprojected ? (
+              <>
+                <p className="small muted" style={{ marginBottom: 10 }}>
+                  One scale across every position: 1000 is the league leader and 500 is half
+                  that modeled value. Based on remaining projections, starter demand, the
+                  option to rotate players, and availability through Week {data.tradeValues.finalWeek}.
+                </p>
+                <div className="metric-grid">
+                  <Metric label="Value above replacement" value={fmt1(leagueValue.points)} sub="expected remaining points" />
+                  <Metric label="Replacement per game" value={fmt1(leagueValue.replacementPerWeek)} sub={`${leagueValue.group} starter level`} />
+                  <Metric label="League leader value" value={fmt1(data.tradeValues.pointsAtIndex100)} sub="expected remaining points" />
+                  <Metric label="Projected games" value={String(leagueValue.weeksProjected)} sub="byes excluded" />
+                </div>
+                <p className="small muted" style={{ marginTop: 8 }}>
+                  An estimate from the saved projections, not a guarantee of future production.
+                  {leagueValue.group === 'K' || leagueValue.group === 'DST'
+                    ? ' Kicker and defense projections have weaker historical reliability, so small value gaps deserve less confidence.' : ''}
+                </p>
+              </>
+            ) : (
+              <p className="small muted">No remaining projection is available for a league value estimate.</p>
+            )}
+          </section>
           {/* ---- This week's forecast distribution ---- */}
           {forecast && (
             <section>
@@ -467,9 +494,12 @@ export function PlayerModal({ pid, week, onClose }: Props) {
 
 
           {/* ---- Rest-of-season profile ---- */}
-          {season && (
+          {season && (season.breakdown.restOfSeasonPoints !== null || season.breakdown.games > 0) && (
             <section>
-              <h3 className="section-title">Redraft outlook · Rest of season {season.score}</h3>
+              <h3 className="section-title">Positional outlook · Rest of season {season.score}</h3>
+              <p className="small muted" style={{ marginBottom: 8 }}>
+                This rating compares {season.group} players only. The league value above uses points over replacement across all positions.
+              </p>
               <div
                 className="row wrap"
                 style={{ gap: 6, marginBottom: 8, alignItems: 'center' }}
@@ -559,7 +589,7 @@ export function PlayerModal({ pid, week, onClose }: Props) {
               </div>
 
               <h3 className="section-title" style={{ marginTop: 14 }}>
-                Why rest-of-season score {season.score}
+                Why rest-of-season position score {season.score}
               </h3>
               <div className="scroll-x">
                 <table className="table">
@@ -761,7 +791,7 @@ export function PlayerModal({ pid, week, onClose }: Props) {
           {value && (
             <section>
               <h3 className="section-title">
-                Why in-season score {value.score}
+                Why in-season position score {value.score}
               </h3>
               {value.breakdown.gamesConfidence < 1 && (
                 <div className="small muted" style={{ marginBottom: 8 }}>
