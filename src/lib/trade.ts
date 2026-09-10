@@ -1,9 +1,18 @@
 /**
- * Cross-position player value, shared by trades and the headline Value Score.
+ * Trade value — the one place in this app where players are compared *across*
+ * positions.
  *
- * Positional ratings answer "is he a good tight end" but discard the size of
- * his advantage over replacement. These points preserve that advantage, and
- * the headline scales the same value to 0–1000 across the entire league.
+ * Everything else here is deliberately within-position. The headline Value
+ * Score is an average of percentiles inside a player's own group, which is the
+ * right shape for "is he a good tight end" and the wrong shape for every
+ * question a trade asks. These points preserve the *size* of a player's
+ * advantage over replacement, which is what a two-for-one has to add up.
+ *
+ * The reverse swap is just as wrong, and was tried: making these points the
+ * headline collapses the browser, because everyone below a position's startable
+ * cliff is worth nothing to a lineup. On the shipped snapshot that put 130
+ * players at exactly zero, 222 more between 1 and 49, and the second-best
+ * quarterback alive at 261 — all true, and none of it a ranking.
  *
  * So trades are priced in **points**, and only in points.
  *

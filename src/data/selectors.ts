@@ -367,7 +367,11 @@ export function rosteredIds(data: LeagueData): Set<string> {
 /**
  * Available free agents, best first.
  *
- * Ranked on the shared headline scale, with underlying points breaking ties.
+ * Ranked by Trade Points rather than the Value Score. This list is unfiltered
+ * across positions by default, and the Value Score is a within-position
+ * percentile — sorting the whole pool by it puts the best available kicker
+ * above most startable receivers, because 971 of 1000 is what "best kicker
+ * alive" looks like in that currency.
  */
 export function freeAgents(data: LeagueData, group: PositionGroup | 'ALL'): EnrichedPlayer[] {
   const owned = rosteredIds(data);
@@ -381,7 +385,7 @@ export function freeAgents(data: LeagueData, group: PositionGroup | 'ALL'): Enri
   }
 
   const points = (p: EnrichedPlayer) => data.tradeValues.byPlayer.get(p.pid)?.points ?? 0;
-  return out.sort((a, b) => (b.valueScore ?? -1) - (a.valueScore ?? -1) || points(b) - points(a));
+  return out.sort((a, b) => points(b) - points(a));
 }
 
 /** Players on a roster that are eligible for a given slot. */

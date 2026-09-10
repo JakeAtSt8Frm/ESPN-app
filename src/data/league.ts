@@ -114,17 +114,38 @@ export interface LeagueData {
   valueIndex: ValueIndex;
   seasonValueIndex: SeasonValueIndex;
   /**
-   * Headline value on one proportional 0–1000 scale across all positions.
-   * The league leader is 1000. No remaining projection means no score.
+   * The headline Value Score: the average of the in-season score and the
+   * rest-of-season score, both percentiled *within a position group* so the two
+   * sit on the same footing. A player carrying only one of the two carries that
+   * one.
+   *
+   * Deliberately within-position, because that is the question the number is
+   * asked: "how good is this quarterback". A points-over-replacement scale
+   * answers a different one — in a one-quarterback league the second-best
+   * quarterback alive clears his replacement by very little, which is true and
+   * is not a ranking of quarterbacks. It also collapses: on this snapshot it
+   * put 130 players at exactly zero and only 12 above 500, because everyone
+   * below a position's startable cliff is worth nothing to a lineup.
+   *
+   * Cross-position comparison is `tradeValues`, in points, and every place that
+   * needs to add players up reads that instead.
    */
   combinedScores: Map<string, number>;
-  /** Average of the two within-position ratings, retained as positional context. */
-  positionScores: Map<string, number>;
+  /**
+   * The same players on one proportional 0–1000 scale across all positions:
+   * projected points over replacement, league leader = 1000.
+   *
+   * Not the headline — see `combinedScores` for why. This is what the player
+   * sheet shows beside it, so the trade currency is legible without asking the
+   * reader to compare raw point totals.
+   */
+  leagueValueScores: Map<string, number>;
   /**
    * Cross-positional trade currency, in projected points over replacement.
    *
-   * The underlying points behind `combinedScores`. Trades add these points
-   * rather than rounded display scores. See `lib/trade.ts`.
+   * Deliberately separate from `combinedScores`: that one is a percentile
+   * within a position group and cannot be added up or compared across
+   * positions, which is everything a trade needs. See `lib/trade.ts`.
    */
   tradeValues: TradeValueIndex;
   /**
@@ -1057,14 +1078,8 @@ export async function loadLeague(
     driftByGroup,
   });
 
-  // One denominator for the entire league, before any UI filtering. Never
-  // substitute a positional percentile when there is no remaining projection.
+  // The one headline number, within position.
   const combinedScores = new Map<string, number>();
-  for (const [pid, value] of tradeValues.byPlayer) {
-    if (!value.unprojected) combinedScores.set(pid, Math.round(value.index * 10));
-  }
-
-  const positionScores = new Map<string, number>();
   const scoredPids = new Set<string>([
     ...valueIndex.byPlayer.keys(),
     ...seasonValueIndex.byPlayer.keys(),
@@ -1077,9 +1092,17 @@ export async function loadLeague(
     if (inSeason === null && seasonValue?.breakdown.restOfSeasonPoints == null) continue;
     const rest = seasonValue?.score ?? null;
     if (inSeason !== null && rest !== null) {
-      positionScores.set(pid, Math.round((inSeason + rest) / 2));
-    } else if (inSeason !== null) positionScores.set(pid, inSeason);
-    else if (rest !== null) positionScores.set(pid, rest);
+      combinedScores.set(pid, Math.round((inSeason + rest) / 2));
+    } else if (inSeason !== null) combinedScores.set(pid, inSeason);
+    else if (rest !== null) combinedScores.set(pid, rest);
+  }
+
+  // One denominator for the entire league, before any UI filtering — the trade
+  // currency made legible. Never a substitute for the headline when there is no
+  // remaining projection: no projection, no cross-position score.
+  const leagueValueScores = new Map<string, number>();
+  for (const [pid, value] of tradeValues.byPlayer) {
+    if (!value.unprojected) leagueValueScores.set(pid, Math.round(value.index * 10));
   }
 
   report('Ready', 4, 4);
@@ -1108,7 +1131,7 @@ export async function loadLeague(
     valueIndex,
     seasonValueIndex,
     combinedScores,
-    positionScores,
+    leagueValueScores,
     tradeValues,
     ownProjections,
     projectionModel,

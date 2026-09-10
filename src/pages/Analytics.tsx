@@ -158,8 +158,14 @@ export function AnalyticsPage() {
           playerIds: team.players,
         })),
         /*
-         * Use the points behind the headline scale to retain precision when
-         * combining players across positions. See `lib/trade.ts`.
+         * Trade Points, not the Value Score.
+         *
+         * The Value Score is a percentile inside a position group, so averaging
+         * it across positions weights every starting slot equally *in percentile
+         * space*: an elite kicker moved this index as much as an elite
+         * quarterback, while being worth a fifth as many real points. Points
+         * over replacement are cross-positionally comparable, which is the only
+         * property this average ever needed. See `lib/trade.ts`.
          */
         players: new Map(
           [...data.tradeValues.byPlayer].map(

@@ -273,13 +273,18 @@ export function PlayerModal({ pid, week, onClose }: Props) {
 
         <div className="sheet__body">
           <section>
-            <h3 className="section-title">League value · {p.valueScore ?? 'Unavailable'}</h3>
+            <h3 className="section-title">
+              Cross-position trade value · {data.leagueValueScores.get(p.pid) ?? 'Unavailable'}
+            </h3>
             {leagueValue && !leagueValue.unprojected ? (
               <>
                 <p className="small muted" style={{ marginBottom: 10 }}>
-                  One scale across every position: 1000 is the league leader and 500 is half
-                  that modeled value. Based on remaining projections, starter demand, the
-                  option to rotate players, and availability through Week {data.tradeValues.finalWeek}.
+                  A second, separate scale, and the only one that can be added up in a trade:
+                  one denominator across every position, where 1000 is the league leader and
+                  500 is half that modeled value. Based on remaining projections, starter
+                  demand, the option to rotate players, and availability through Week {data.tradeValues.finalWeek}.
+                  The Value Score above rates this player against others at his own position
+                  instead, which is why a good kicker scores well there and low here.
                 </p>
                 <div className="metric-grid">
                   <Metric label="Value above replacement" value={fmt1(leagueValue.points)} sub="expected remaining points" />
@@ -496,9 +501,10 @@ export function PlayerModal({ pid, week, onClose }: Props) {
           {/* ---- Rest-of-season profile ---- */}
           {season && (season.breakdown.restOfSeasonPoints !== null || season.breakdown.games > 0) && (
             <section>
-              <h3 className="section-title">Positional outlook · Rest of season {season.score}</h3>
+              <h3 className="section-title">Redraft outlook · Rest of season {season.score}</h3>
               <p className="small muted" style={{ marginBottom: 8 }}>
-                This rating compares {season.group} players only. The league value above uses points over replacement across all positions.
+                This rating compares {season.group} players only, and is one of the two halves
+                averaged into the Value Score.
               </p>
               <div
                 className="row wrap"
@@ -589,7 +595,7 @@ export function PlayerModal({ pid, week, onClose }: Props) {
               </div>
 
               <h3 className="section-title" style={{ marginTop: 14 }}>
-                Why rest-of-season position score {season.score}
+                Why rest-of-season score {season.score}
               </h3>
               <div className="scroll-x">
                 <table className="table">
@@ -791,7 +797,7 @@ export function PlayerModal({ pid, week, onClose }: Props) {
           {value && (
             <section>
               <h3 className="section-title">
-                Why in-season position score {value.score}
+                Why in-season score {value.score}
               </h3>
               {value.breakdown.gamesConfidence < 1 && (
                 <div className="small muted" style={{ marginBottom: 8 }}>

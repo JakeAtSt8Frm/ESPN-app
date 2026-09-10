@@ -163,23 +163,11 @@ actually three different years rather than one written three times.
 **Score** — `scoringSettings` × raw stat keys, with the D/ST override applied
 per position. Exact, verified above.
 
-**Value Score (0–1000)** — the headline number, normalized across **all six
-positions** using expected remaining points above starter replacement. It uses
-the same model as Trade Points below: league scoring, starting requirements,
-FLEX demand, projected games, availability, and the option to rotate players.
-The highest modeled value in the entire league is 1000; 500 means half that
-value, subject to display rounding. Position and roster filters keep the same
-denominator. Values are relative to the loaded league and remaining schedule,
-so a 500 in another league or snapshot need not represent the same point total.
-
-The index is calculated before rounding points. A projected player with no
-advantage scores zero; a player without remaining projections displays an em
-dash. Missing evidence never inherits a neutral positional score. A position
-with no eligible starting seat contributes no lineup value.
-
-**Position score (0–1000)** remains available as a separate sort and in the
-player's detail sheet. It averages two within-position ratings, describing
-standing within that position:
+**Value Score (0–1000)** — the headline number, the average of two
+within-position valuations: an in-season half and a rest-of-season half. Every
+signal in both is a percentile *within the player's own position group*, which is
+what lets the two be averaged and read the same way — "top of his own pool", not
+comparable across positions.
 
 - *In-season half* blends 10 signals, led by PPG (.24), exponentially weighted
   form (.18), the current projection (.15) and recent opportunity share (.14).
@@ -869,10 +857,10 @@ the score used by the selected projection sort stays visible. The team overview
 flags missing starting slots, byes, and current injury concerns; current injuries
 are excluded when reviewing historical lineups.
 
-The player browser separates **League value** (the shared 0–1000 scale of value
-above starter replacement), **Value over waivers** (above the best available
-player's projected per-game rate), and **Position score** (the within-position
-0–1000 blend). The selected value metric is shown on each row. Position filtering
+The player browser separates **League value** (rest-of-season points above
+starter replacement), **Value over waivers** (above the best available player's
+projected per-game rate), and **Position score** (the within-position 0–1000
+blend). The points used to sort are also shown on each row. Position filtering
 keeps the league-value ordering consistent. Historical production sorts use the
 same season as their rank chips rather than mixing current and prior results.
 Waiver comparisons use the best free player's rate without averaging in the
@@ -918,16 +906,14 @@ and both projections side by side.
 Any player is clickable for a detail sheet with a projected-vs-actual chart, a
 season profile, a "why this Value Score" breakdown, and a week-by-week table.
 
-### Cross-position value and trades
+### Trades are the one thing the Value Score cannot price
 
-The former headline averaged percentiles within each position. That put the
-best kicker near the best running back by construction. Even the season VORP
-leg lost its scarcity adjustment: subtracting the same replacement level from
-every player at a position leaves their percentile order unchanged.
-
-The headline now scales the cross-position Trade Points model. The separate
-Position score keeps the older ratings for evaluating standing within a group.
-Trades use underlying points to retain precision when combining players.
+Every other number in this app is a percentile *within a position group*, and on
+the shipped snapshot that produces a ranking led by Trey McBride at 980, Jahmyr
+Gibbs at 978 and **Brandon Aubrey, a $5 kicker, at 971** — ahead of Josh Allen,
+Ja'Marr Chase and Christian McCaffrey. Nothing is broken: 971 correctly says
+Aubrey is the best kicker alive. It just cannot be added up, and adding up is
+the whole of a two-for-one.
 
 So the Trade page prices in points and nothing else:
 
@@ -955,21 +941,48 @@ team against 1.1 kickers, read off the real rosters, and that ratio scales it.
 Measured against ESPN's auction values — the one genuinely cross-positional
 market available, and nothing here is fitted to it:
 
-| | Trade Points | Season VORP | Former positional headline |
+| | Trade Points | Season VORP | Value Score |
 |---|---|---|---|
 | Rank correlation with ESPN $ | **0.93** | 0.75 | 0.74 |
 
-These are historical development measurements, not a current accuracy guarantee.
-Market agreement is a sanity check; it does not establish future performance.
+These are development measurements on one snapshot, not a standing accuracy
+claim. Market agreement is a sanity check; it does not establish future results.
 
-`npm run verify:values` now loads both saved leagues through the production
-loader and checks headline normalization, missing evidence, monotonic ordering,
-display consistency, and total starter demand. It prints each position's pool
-size, starter depth, replacement rate and leading value for inspection.
-`npm run verify:trade` covers equal advantages across all six positions,
-proportional values, byes, FLEX/scoring sensitivity, unused positions, invalid
-projections and rounding boundaries. Both run on deploy, even without ESPN
-credentials. These verify model behavior; they do not claim exact player prices.
+#### Why Trade Points is not the headline
+
+The obvious next step — promote the number that correlates best and make Trade
+Points the Value Score — was tried, shipped, and reverted, and the reason is
+worth keeping.
+
+Points over replacement measure surplus *to a starting lineup*, so everybody
+below a position's startable cliff is worth nothing to one. On this snapshot
+that put 130 rated players at exactly zero, 222 more between 1 and 49, and only
+12 of 499 above 500. It also compresses positions against each other by design:
+in a one-quarterback league the second-best quarterback alive clears his
+replacement by very little, so Lamar Jackson scored 261, Derrick Henry 473 and
+Jason Myers 83. Every one of those numbers is correct about lineup surplus and
+useless as an answer to "how good is this quarterback", which is what a browser
+sorted by value is being asked.
+
+So the two scales stay separate and each answers its own question. The Value
+Score ranks a player against his own position and is what every row, chip and
+player sheet shows. Trade Points add up across positions and are what the Trade
+page, the Analytics roster averages, the free-agent ordering and the
+`League value` sort all read. The player sheet shows both, side by side.
+
+`npm run verify:values` loads both saved leagues through the production loader
+and asserts the split holds: that every position is rated on its own scale —
+each pool leading at 900+ with a median near 500 and no rated player at zero —
+that the headline is the average of the two within-position ratings, that a
+player with neither production nor a projection is left unrated rather than
+scored from priors, and that the separate cross-position scale stays
+proportional with the league leader at 1000. The per-position leader-and-median
+assertion is the one that fails on the collapse described above.
+`npm run verify:trade` covers the points model itself: equal advantages across
+all six positions, proportional values, byes, FLEX and scoring sensitivity,
+unused positions, invalid projections and rounding boundaries. Both run on every
+deploy, including deploys without ESPN credentials, because the committed
+snapshot is a path that ships too.
 
 #### What it gets wrong
 

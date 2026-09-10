@@ -153,8 +153,11 @@ export function PlayersPage() {
       }
 
       /*
-       * Order on the shared score. Rounded point totals can tie even when
-       * normalized values differ. Filters must never change the scale's pool.
+       * Sorting by value across positions has to use points, not the Value
+       * Score — that one is a percentile inside a position group, so an "All
+       * positions" list ordered by it is led by whoever is most dominant
+       * *relative to his own pool*, which is usually a kicker. The position
+       * score is a separate sort with a different purpose.
        */
       /*
        * The three production sorts fall back to last season, on the same switch
@@ -175,10 +178,10 @@ export function PlayersPage() {
 
       const sortValue =
         projection !== null ? projection : sort === 'value'
-          ? (data.combinedScores.get(pid) ?? -1)
+          ? (data.tradeValues.byPlayer.get(pid)?.points ?? 0)
           : sort === 'waiverValue'
             ? (data.tradeValues.byPlayer.get(pid)?.pointsOverWaiver ?? 0)
-            : sort === 'positionValue' ? (data.positionScores.get(pid) ?? -1)
+            : sort === 'positionValue' ? (data.combinedScores.get(pid) ?? -1)
               : sort === 'appSeasonTotal' ? (seasonTotals?.get(pid) ?? 0)
                 : sort === 'ppg' ? (production?.ppg ?? 0)
                   : sort === 'total' ? (production?.total ?? 0)
@@ -321,11 +324,11 @@ export function PlayersPage() {
 
       <p className="small muted" style={{ marginBottom: 14 }}>
         {sort === 'value'
-          ? `Value Score (0–1000) compares projected value above replacement across all positions in this ${data.league.size}-team league, through Week ${data.playoff.finalWeek}. The league leader is 1000; 500 means half that modeled value. Filtering keeps the same scale.`
+          ? `Expected rest-of-season points above starter replacement in this ${data.league.size}-team league, through Week ${data.playoff.finalWeek}. Comparable across positions, which is what trades need — it is not a ranking within a position.`
           : sort === 'waiverValue'
             ? `Expected rest-of-season points above the best available waiver option at each position, through Week ${data.playoff.finalWeek}. This measures player value; roster fit determines which pickups help your team.`
           : sort === 'positionValue'
-            ? 'Position score (0–1000) blends current production with rest-of-season outlook within each position. It describes standing within that position; the headline Value Score measures value across positions.'
+            ? 'Value Score (0–1000) compares players within their own position. It blends current production with rest-of-season outlook.'
           : sort === 'appProjection'
           ? `Week ${week} app projections are pregame medians, with ESPN used when an app estimate is unavailable.`
           : sort === 'espnProjection'
@@ -374,16 +377,15 @@ export function PlayersPage() {
               primaryProjection={sort === 'appProjection' ? 'app' : sort === 'espnProjection' ? 'espn' : undefined}
               onSelect={setOpenPid}
               note={owner}
-              valueMetric={sort === 'waiverValue' ? {
-                label: 'Waiver',
+              valueMetric={sort === 'value' || sort === 'waiverValue' ? {
+                label: sort === 'value' ? 'Value' : 'Waiver',
                 value: data.tradeValues.byPlayer.get(player.pid)?.unprojected ? null
-                  : data.tradeValues.byPlayer.get(player.pid)?.pointsOverWaiver ?? null,
-                description: 'Expected rest-of-season points above the best available waiver option',
-              } : sort === 'positionValue' ? {
-                label: 'Position',
-                value: data.positionScores.get(player.pid) ?? null,
-                description: 'Rating within this position, out of 1000',
-                signed: false,
+                  : data.tradeValues.byPlayer.get(player.pid)?.[
+                    sort === 'value' ? 'points' : 'pointsOverWaiver'
+                  ] ?? null,
+                description: sort === 'value'
+                  ? 'Expected rest-of-season points above starter replacement'
+                  : 'Expected rest-of-season points above the best available waiver option',
               } : undefined}
               /*
                 On the right, in the column the actual score would occupy —

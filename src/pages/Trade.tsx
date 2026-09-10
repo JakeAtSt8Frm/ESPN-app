@@ -1,5 +1,5 @@
 /**
- * Trade — cross-position value and the effect on each starting lineup.
+ * Trade — the only page that compares players across positions.
  *
  * Trades add the points behind the headline Value Score, preserving precision
  * through multi-player deals. See `lib/trade.ts` for how those points are built.
